@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 
 class LeaderboardEntry(BaseModel):
     discord_id: str
-    riot_id: str
     rank: str
     points: int
     matches_played: int
