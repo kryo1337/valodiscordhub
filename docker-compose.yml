@@ -1,27 +1,35 @@
 services:
-  # mongo:
-  #   image: mongo
-  #   container_name: mongo_db
-  #   restart: always
-  #   ports:
-  #     - "27017:27017"
-  #   volumes:
-  #     - mongo_data:/data/db
-  #   env_file:
-  #     - .env
-  #
-  # db-init:
-  #   build: ./db
-  #   depends_on:
-  #     - mongo
-  #   env_file:
-  #     - .env
+  mongo:
+    image: mongo:latest
+    container_name: mongo_db
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+
+  db-init:
+    build: ./db
+    depends_on:
+      - mongo
+    environment:
+      - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/valodiscordhub?authSource=admin
 
   bot:
     build: ./bot
-    #  depends_on:
-    #   - mongo
+    depends_on:
+      - mongo
+      - db-init
+    environment:
+      - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/valodiscordhub?authSource=admin
+      - PYTHONPATH=/bot:/bot/..
+    volumes:
+      - ./db:/bot/db
     env_file:
       - .env
-# volumes:
-#  mongo_data:
+
+volumes:
+  mongo_data:

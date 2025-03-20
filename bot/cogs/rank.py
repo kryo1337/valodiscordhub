@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import os
 
 from utils.scraper import get_player_rank
+from utils.db import get_player, create_player, update_player_rank
 
 load_dotenv()
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
@@ -21,9 +22,34 @@ class Rank(commands.Cog):
 
         try:
             rank = await get_player_rank(riot_id)
-            await interaction.followup.send(f"**{riot_id}** has rank: **{rank}**")
+            
+            player = get_player(str(interaction.user.id))
+            if not player:
+                player = create_player(
+                    discord_id=str(interaction.user.id),
+                    riot_id=riot_id,
+                    rank=rank
+                )
+                await interaction.followup.send(
+                    f"**{riot_id}** has rank: **{rank}**\n"
+                    f"✅ Player profile created!"
+                )
+            else:
+                if player.riot_id != riot_id:
+                    await interaction.followup.send(
+                        f"❌ This Riot ID is different from your registered one.\n"
+                        f"Your registered Riot ID: **{player.riot_id}**"
+                    )
+                    return
+                
+                player = update_player_rank(str(interaction.user.id), rank)
+                await interaction.followup.send(
+                    f"**{riot_id}** has rank: **{rank}**\n"
+                    f"✅ Rank updated!"
+                )
+                
         except Exception as e:
-            await interaction.followup.send(f"error: {e}")
+            await interaction.followup.send(f"❌ Error: {str(e)}")
 
 
 async def setup(bot: commands.Bot):
