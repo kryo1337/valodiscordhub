@@ -9,5 +9,5 @@ class QueueEntry(BaseModel):
 
 
 class Queue(BaseModel):
-    rank_group: Literal["iron-plat", "dia-asc", "imm1-radiant"]
+    rank_group: Literal["iron-plat", "dia-asc", "imm-radiant"]
     players: List[QueueEntry] = Field(default_factory=list)
