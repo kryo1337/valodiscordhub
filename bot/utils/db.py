@@ -54,13 +54,6 @@ def add_to_queue(rank_group: str, discord_id: str) -> Queue:
     queue.players.append(QueueEntry(discord_id=discord_id))
     return update_queue(rank_group, queue.players)
 
-def remove_from_queue(rank_group: str, count: int = 10) -> List[QueueEntry]:
-    queue = get_queue(rank_group)
-    removed_players = queue.players[:count]
-    queue.players = queue.players[count:]
-    update_queue(rank_group, queue.players)
-    return removed_players
-
 def remove_player_from_queue(rank_group: str, discord_id: str) -> Queue:
     queue = get_queue(rank_group)
     queue.players = [p for p in queue.players if p.discord_id != discord_id]
