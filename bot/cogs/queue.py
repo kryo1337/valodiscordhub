@@ -3,7 +3,6 @@ from discord.ext import commands
 from discord import app_commands
 from typing import List
 from datetime import datetime
-import logging
 from dotenv import load_dotenv
 import os
 from db.models.queue import QueueEntry
@@ -15,10 +14,8 @@ from utils.db import (
     create_player,
     update_queue,
 )
-from .match import MatchCog
+from .match import create_match
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 load_dotenv()
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
@@ -48,7 +45,13 @@ class QueueView(discord.ui.View):
                 )
                 return
 
-        player = get_player(str(interaction.user.id))
+        try:
+            player = get_player(user_id)
+        except Exception as e:
+            await interaction.response.send_message(
+                "An error occurred while checking your registration.", ephemeral=True
+            )
+            return
 
         if not player:
             await interaction.response.send_message(
@@ -56,55 +59,71 @@ class QueueView(discord.ui.View):
             )
             return
 
-        queue = get_queue(self.rank_group)
-        player_in_queue = any(
-            p.discord_id == str(interaction.user.id) for p in queue.players
-        )
+        try:
+            queue = get_queue(self.rank_group)
+        except Exception as e:
+            await interaction.response.send_message(
+                "An error occurred while accessing the queue.", ephemeral=True
+            )
+            return
+
+        player_in_queue = any(p.discord_id == user_id for p in queue.players)
 
         if player_in_queue:
-            queue = remove_player_from_queue(self.rank_group, str(interaction.user.id))
-            await interaction.response.send_message(
-                "You have left the queue!", ephemeral=True
-            )
+            try:
+                queue = remove_player_from_queue(self.rank_group, user_id)
+                await interaction.response.send_message(
+                    "You have left the queue!", ephemeral=True
+                )
+            except Exception as e:
+                await interaction.response.send_message(
+                    "An error occurred while leaving the queue.", ephemeral=True
+                )
+                return
         else:
-            queue = add_to_queue(self.rank_group, str(interaction.user.id))
-            await interaction.response.send_message(
-                "You have joined the queue!", ephemeral=True
-            )
+            try:
+                queue = add_to_queue(self.rank_group, user_id)
+                await interaction.response.send_message(
+                    "You have joined the queue!", ephemeral=True
+                )
+            except Exception as e:
+                await interaction.response.send_message(
+                    "An error occurred while joining the queue.", ephemeral=True
+                )
+                return
 
         self.last_interaction[user_id] = current_time
 
-        player_in_queue = any(
-            p.discord_id == str(interaction.user.id) for p in queue.players
-        )
+        player_in_queue = any(p.discord_id == user_id for p in queue.players)
         button.label = "Leave Queue" if player_in_queue else "Join Queue"
         button.style = (
-            discord.ButtonStyle.danger
-            if player_in_queue
-            else discord.ButtonStyle.primary
+            discord.ButtonStyle.danger if player_in_queue else discord.ButtonStyle.primary
         )
 
         await interaction.message.edit(
             content=f"**{self.rank_group.upper()} Queue**\n"
-            f"Click the button to join/leave the queue!\n"
-            f"Current players in queue: {len(queue.players)}\n"
-            f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players])}",
+                    f"Click the button to join/leave the queue!\n"
+                    f"Current players in queue: {len(queue.players)}\n"
+                    f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players])}",
             view=self,
         )
 
         if len(queue.players) >= 10:
-            cog = interaction.client.get_cog("QueueCog")
-            if cog:
-                await cog.create_match(interaction.guild, self.rank_group, queue.players[:10])
-
+            matched_players = queue.players[:10]
+            await create_match(interaction.guild, self.rank_group, matched_players)
+            for player in matched_players:
+                queue = remove_player_from_queue(self.rank_group, player.discord_id)
+            await interaction.message.edit(
+                content=f"**{self.rank_group.upper()} Queue**\n"
+                        f"Click the button to join/leave the queue!\n"
+                        f"Current players in queue: {len(queue.players)}\n"
+                        f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players])}",
+                view=self,
+            )
 
 class QueueCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.match_cog = None
-
-    async def cog_load(self):
-        self.match_cog = self.bot.get_cog("MatchCog")
 
     @app_commands.command(name="test_queue")
     @app_commands.default_permissions(administrator=True)
@@ -154,9 +173,9 @@ class QueueCog(commands.Cog):
         async for message in channel.history(limit=1):
             await message.edit(
                 content=f"**IMMORTAL-RADIANT Queue**\n"
-                f"Click the button to join/leave the queue!\n"
-                f"Current players in queue: {len(queue.players)}\n"
-                f"Players: {', '.join(f'<@{p.discord_id}>' for p in queue.players)}",
+                        f"Click the button to join/leave the queue!\n"
+                        f"Current players in queue: {len(queue.players)}\n"
+                        f"Players: {', '.join(f'<@{p.discord_id}>' for p in queue.players)}",
                 view=QueueView("imm-radiant"),
             )
             break
@@ -178,7 +197,7 @@ class QueueCog(commands.Cog):
                     await channel.delete()
         else:
             category = await interaction.guild.create_category("Queue")
-        
+
         rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
         for rank_group in rank_groups:
             overwrites = {
@@ -201,7 +220,6 @@ class QueueCog(commands.Cog):
             )
 
             view = QueueView(rank_group)
-            
             await channel.send(
                 f"**{rank_group.upper()} Queue**\n"
                 f"Click the button to join/leave the queue!\n"
@@ -213,30 +231,5 @@ class QueueCog(commands.Cog):
             "✅ Queue channels have been set up!", ephemeral=True
         )
 
-    async def create_match(self, guild: discord.Guild, rank_group: str, players: List[QueueEntry]):
-        queue = get_queue(rank_group)
-        if not queue or len(queue.players) < 10:
-            return
-
-        queue.players = queue.players[10:]
-        update_queue(rank_group, queue.players)
-
-        category = discord.utils.get(guild.categories, name="Queue")
-        queue_channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
-        if queue_channel:
-            async for message in queue_channel.history(limit=1):
-                await message.edit(
-                    content=f"**{rank_group.upper()} Queue**\n"
-                    f"Click the button to join/leave the queue!\n"
-                    f"Current players in queue: {len(queue.players)}\n"
-                    f"Players: {', '.join(f'<@{p.discord_id}>' for p in queue.players)}",
-                    view=QueueView(rank_group),
-                )
-                break
-
-        if self.match_cog:
-            await self.match_cog.create_match(guild, rank_group, players)
-
-
 async def setup(bot):
-    await bot.add_cog(QueueCog(bot)) 
+    await bot.add_cog(QueueCog(bot))
