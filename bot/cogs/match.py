@@ -1,14 +1,10 @@
 import discord
 from discord.ext import commands
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime
 import asyncio
 import random
 from db.models.queue import QueueEntry
-import logging
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 class TeamSelectionView(discord.ui.View):
     def __init__(self, match_id: str, players: List[QueueEntry], captains: List[str]):
@@ -67,6 +63,7 @@ class TeamSelectionView(discord.ui.View):
                     self.timeout_task.cancel()
                 await self.select_callback(interaction, selected_id)
                 await self.update_selection_message(message)
+                await interaction.response.defer()
 
             select_menu.callback = select_callback
             view.add_item(select_menu)
@@ -170,14 +167,14 @@ class SideSelectionView(discord.ui.View):
             f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])}\n"
             f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])}\n\n"
             f"**Side Selection:**\n"
-            f"{side_selector_team} Team Captain (<@{self.side_selector_id}>), please select your side:"
+            f"{side_selector_team} Team Captain (<@{self.side_selector_id}>), please select your side:\n"
+            f"Time remaining: 15 seconds"
         )
-        await message.edit(content=message_content)
 
         view = discord.ui.View()
         
-        attack_button = discord.ui.Button(label="Select Attack", style=discord.ButtonStyle.primary)
-        defense_button = discord.ui.Button(label="Select Defense", style=discord.ButtonStyle.secondary)
+        attack_button = discord.ui.Button(label="Attack", style=discord.ButtonStyle.primary)
+        defense_button = discord.ui.Button(label="Defense", style=discord.ButtonStyle.secondary)
 
         async def attack_callback(interaction: discord.Interaction):
             if str(interaction.user.id) != self.side_selector_id:
@@ -191,7 +188,6 @@ class SideSelectionView(discord.ui.View):
             else:
                 self.blue_side = "attack"
                 self.red_side = "defense"
-            self.last_message = interaction.message
             await self.check_sides(interaction)
             await interaction.response.defer()
 
@@ -207,26 +203,28 @@ class SideSelectionView(discord.ui.View):
             else:
                 self.blue_side = "defense"
                 self.red_side = "attack"
-            self.last_message = interaction.message
             await self.check_sides(interaction)
             await interaction.response.defer()
 
         attack_button.callback = attack_callback
         defense_button.callback = defense_callback
-
         view.add_item(attack_button)
         view.add_item(defense_button)
 
-        await message.channel.send(
-            f"<@{self.side_selector_id}> Select your side:",
-            view=view
-        )
+        try:
+            await message.edit(content=message_content, view=view)
+            logging.info(f"Updated message for side selection in match {self.match_id}")
+        except discord.HTTPException as e:
+            logging.error(f"Failed to edit message for side selection in match {self.match_id}: {e}")
+            return
+
         await self.start_timeout()
 
     async def on_timeout(self):
         if not self.red_side or not self.blue_side:
             self.red_side = random.choice(["attack", "defense"])
             self.blue_side = "defense" if self.red_side == "attack" else "attack"
+            logging.info(f"Side selection timeout for {self.match_id}: Red={self.red_side}, Blue={self.blue_side}")
 
         if self.last_message:
             await self.check_sides(self.last_message)
@@ -235,48 +233,51 @@ class SideSelectionView(discord.ui.View):
         if self.timeout_task:
             self.timeout_task.cancel()
         self.timeout_task = asyncio.create_task(self._timeout_handler())
+        logging.info(f"Started timeout for side selection in match {self.match_id}")
 
     async def _timeout_handler(self):
         try:
             await asyncio.sleep(15)
             await self.on_timeout()
         except asyncio.CancelledError:
-            pass
+            logging.info(f"Timeout cancelled for side selection in match {self.match_id}")
 
-    async def check_sides(self, interaction: discord.Interaction):
+    async def check_sides(self, interaction: Union[discord.Interaction, discord.Message]):
         if self.red_side and self.blue_side:
             try:
-                match_category = interaction.channel.category
+                guild = interaction.guild if isinstance(interaction, discord.Interaction) else interaction.guild
+                channel = interaction.channel if isinstance(interaction, discord.Interaction) else interaction.channel
+                match_category = channel.category
                 if not match_category:
                     raise ValueError("Match category not found")
 
                 overwrites = {
-                    interaction.guild.default_role: discord.PermissionOverwrite(connect=False),
-                    interaction.guild.me: discord.PermissionOverwrite(connect=True, manage_channels=True),
+                    guild.default_role: discord.PermissionOverwrite(connect=False),
+                    guild.me: discord.PermissionOverwrite(connect=True, manage_channels=True),
                 }
                 for member_id in self.red_team:
-                    member = interaction.guild.get_member(int(member_id))
+                    member = guild.get_member(int(member_id))
                     if member:
                         overwrites[member] = discord.PermissionOverwrite(connect=True)
 
-                red_vc = await interaction.guild.create_voice_channel(
-                    name=f"Red Team ({self.red_side.title()})",
+                red_vc = await guild.create_voice_channel(
+                    name=f"Red Team",
                     category=match_category,
                     overwrites=overwrites,
                     user_limit=5
                 )
 
                 overwrites = {
-                    interaction.guild.default_role: discord.PermissionOverwrite(connect=False),
-                    interaction.guild.me: discord.PermissionOverwrite(connect=True, manage_channels=True),
+                    guild.default_role: discord.PermissionOverwrite(connect=False),
+                    guild.me: discord.PermissionOverwrite(connect=True, manage_channels=True),
                 }
                 for member_id in self.blue_team:
-                    member = interaction.guild.get_member(int(member_id))
+                    member = guild.get_member(int(member_id))
                     if member:
                         overwrites[member] = discord.PermissionOverwrite(connect=True)
 
-                blue_vc = await interaction.guild.create_voice_channel(
-                    name=f"Blue Team ({self.blue_side.title()})",
+                blue_vc = await guild.create_voice_channel(
+                    name=f"Blue Team",
                     category=match_category,
                     overwrites=overwrites,
                     user_limit=5
@@ -388,10 +389,10 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
     match_id = f"match_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     match_category = await guild.create_category(match_id)
 
-    match_channel = await match_category.create_text_channel(name="match-info")
+    match_channel = await match_category.create_text_channel(name="Match")
 
     match_vc = await match_category.create_voice_channel(
-        name=f"VC - {match_id}", user_limit=10
+        name="Lobby", user_limit=10
     )
 
     captains = random.sample([p.discord_id for p in players], 2)

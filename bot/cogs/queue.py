@@ -1,11 +1,10 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from typing import List
 from datetime import datetime
-from dotenv import load_dotenv
 import os
-from db.models.queue import QueueEntry
+from dotenv import load_dotenv
+from db.models.queue import QueueEntry, Queue
 from utils.db import (
     get_player,
     add_to_queue,
@@ -15,7 +14,6 @@ from utils.db import (
     update_queue,
 )
 from .match import create_match
-
 
 load_dotenv()
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
@@ -27,7 +25,7 @@ class QueueView(discord.ui.View):
         self.last_interaction = {}
 
     @discord.ui.button(
-        label="Join Queue", style=discord.ButtonStyle.primary, custom_id="join_button"
+        label="Queue", style=discord.ButtonStyle.grey, custom_id="join_button"
     )
     async def join_button(
         self, interaction: discord.Interaction, button: discord.ui.Button
@@ -94,36 +92,53 @@ class QueueView(discord.ui.View):
 
         self.last_interaction[user_id] = current_time
 
-        player_in_queue = any(p.discord_id == user_id for p in queue.players)
-        button.label = "Leave Queue" if player_in_queue else "Join Queue"
-        button.style = (
-            discord.ButtonStyle.danger if player_in_queue else discord.ButtonStyle.primary
-        )
-
-        await interaction.message.edit(
-            content=f"**{self.rank_group.upper()} Queue**\n"
-                    f"Click the button to join/leave the queue!\n"
-                    f"Current players in queue: {len(queue.players)}\n"
-                    f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players])}",
-            view=self,
-        )
-
         if len(queue.players) >= 10:
             matched_players = queue.players[:10]
             await create_match(interaction.guild, self.rank_group, matched_players)
             for player in matched_players:
                 queue = remove_player_from_queue(self.rank_group, player.discord_id)
-            await interaction.message.edit(
+
+        queue = get_queue(self.rank_group)
+
+        channel = interaction.channel
+        async for message in channel.history(limit=1):
+            await message.edit(
                 content=f"**{self.rank_group.upper()} Queue**\n"
-                        f"Click the button to join/leave the queue!\n"
+                        f"Click the button to the queue!\n"
                         f"Current players in queue: {len(queue.players)}\n"
-                        f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players])}",
+                        f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players]) if queue.players else 'None'}",
                 view=self,
             )
+            break
 
 class QueueCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+    async def setup_existing_queues(self):
+        guild = self.bot.get_guild(GUILD_ID)
+        if not guild:
+            return
+
+        category = discord.utils.get(guild.categories, name="Queue")
+        if not category:
+            return
+
+        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
+        for rank_group in rank_groups:
+            channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
+            if channel:
+                async for message in channel.history(limit=1):
+                    queue = get_queue(rank_group) or Queue(rank_group=rank_group, players=[])
+                    view = QueueView(rank_group)
+                    await message.edit(
+                        content=f"**{rank_group.upper()} Queue**\n"
+                                f"Click the button to join/leave the queue!\n"
+                                f"Current players in queue: {len(queue.players)}\n"
+                                f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players]) if queue.players else 'None'}",
+                        view=view,
+                    )
+                    break
 
     @app_commands.command(name="test_queue")
     @app_commands.default_permissions(administrator=True)
@@ -156,16 +171,13 @@ class QueueCog(commands.Cog):
                 player = create_player(discord_id, riot_id, rank)
 
             queue_entry = QueueEntry(
-                discord_id=player.discord_id,
-                riot_id=player.riot_id,
-                rank=player.rank,
-                join_time=datetime.now(),
+                discord_id=player.discord_id
             )
             test_players.append(queue_entry)
 
         queue = get_queue("imm-radiant")
         if not queue:
-            queue = QueueEntry(rank_group="imm-radiant", players=[])
+            queue = Queue(rank_group="imm-radiant", players=[])
 
         queue.players.extend(test_players)
         update_queue("imm-radiant", queue.players)
@@ -219,11 +231,13 @@ class QueueCog(commands.Cog):
                 name=f"queue-{rank_group}", overwrites=overwrites
             )
 
+            queue = get_queue(rank_group) or Queue(rank_group=rank_group, players=[])
             view = QueueView(rank_group)
             await channel.send(
-                f"**{rank_group.upper()} Queue**\n"
-                f"Click the button to join/leave the queue!\n"
-                f"Current players in queue: 0",
+                content=f"**{rank_group.upper()} Queue**\n"
+                        f"Click the button to join/leave the queue!\n"
+                        f"Current players in queue: {len(queue.players)}\n"
+                        f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players]) if queue.players else 'None'}",
                 view=view,
             )
 
@@ -232,4 +246,6 @@ class QueueCog(commands.Cog):
         )
 
 async def setup(bot):
-    await bot.add_cog(QueueCog(bot))
+    cog = QueueCog(bot)
+    await bot.add_cog(cog)
+    await cog.setup_existing_queues()
