@@ -47,7 +47,7 @@ class QueueView(discord.ui.View):
             player = get_player(user_id)
         except Exception as e:
             await interaction.response.send_message(
-                "An error occurred while checking your registration.", ephemeral=True
+                f"An error occurred while checking your registration: {str(e)}", ephemeral=True
             )
             return
 
@@ -61,7 +61,7 @@ class QueueView(discord.ui.View):
             queue = get_queue(self.rank_group)
         except Exception as e:
             await interaction.response.send_message(
-                "An error occurred while accessing the queue.", ephemeral=True
+                f"An error occurred while accessing the queue: {str(e)}", ephemeral=True
             )
             return
 
@@ -75,7 +75,7 @@ class QueueView(discord.ui.View):
                 )
             except Exception as e:
                 await interaction.response.send_message(
-                    "An error occurred while leaving the queue.", ephemeral=True
+                    f"An error occurred while leaving the queue: {str(e)}", ephemeral=True
                 )
                 return
         else:
@@ -86,7 +86,7 @@ class QueueView(discord.ui.View):
                 )
             except Exception as e:
                 await interaction.response.send_message(
-                    "An error occurred while joining the queue.", ephemeral=True
+                    f"An error occurred while joining the queue: {str(e)}", ephemeral=True
                 )
                 return
 
@@ -94,22 +94,26 @@ class QueueView(discord.ui.View):
 
         if len(queue.players) >= 10:
             matched_players = queue.players[:10]
-            await create_match(interaction.guild, self.rank_group, matched_players)
             for player in matched_players:
                 queue = remove_player_from_queue(self.rank_group, player.discord_id)
 
         queue = get_queue(self.rank_group)
 
-        channel = interaction.channel
-        async for message in channel.history(limit=1):
-            await message.edit(
-                content=f"**{self.rank_group.upper()} Queue**\n"
-                        f"Click the button to the queue!\n"
-                        f"Current players in queue: {len(queue.players)}\n"
-                        f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players]) if queue.players else 'None'}",
-                view=self,
-            )
-            break
+        try:
+            channel = interaction.channel
+            async for message in channel.history(limit=1):
+                await message.edit(
+                    content=f"**{self.rank_group.upper()} Queue**\n"
+                            f"Click the button to join/leave the queue!\n"
+                            f"Current players in queue: {len(queue.players)}\n"
+                            f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players]) if queue.players else 'None'}",
+                    view=self,
+                )
+                break
+        except Exception as e:
+            await interaction.channel.send(f"Error updating queue message: {str(e)}")
+
+        await create_match(interaction.guild, self.rank_group, matched_players)
 
 class QueueCog(commands.Cog):
     def __init__(self, bot):

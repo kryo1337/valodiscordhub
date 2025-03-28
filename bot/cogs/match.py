@@ -4,7 +4,15 @@ from typing import List, Optional, Union
 from datetime import datetime
 import asyncio
 import random
+# import logging
+# import sys
 from db.models.queue import QueueEntry
+
+# logger = logging.getLogger('TeamSelection')
+# logger.setLevel(logging.INFO)
+# handler = logging.StreamHandler(sys.stdout)
+# handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+# logger.addHandler(handler)
 
 class TeamSelectionView(discord.ui.View):
     def __init__(self, match_id: str, players: List[QueueEntry], captains: List[str]):
@@ -23,10 +31,13 @@ class TeamSelectionView(discord.ui.View):
 
     async def update_selection_message(self, message: discord.Message):
         self.selection_message = message
-        current_captain = self.captains[self.current_captain_index]
         available_players = [p for p in self.players if p.discord_id not in self.red_team + self.blue_team]
         remaining_players = len(available_players)
 
+        if self.current_selection_index >= len(self.selection_order):
+            return
+
+        current_captain = self.captains[self.current_captain_index]
         message_content = (
             f"**Team Selection in Progress**\n\n"
             f"🔴 Red Team Captain: <@{self.captains[0]}>\n"
@@ -41,7 +52,7 @@ class TeamSelectionView(discord.ui.View):
         )
 
         view = discord.ui.View()
-        if available_players:
+        if available_players and self.current_selection_index < len(self.selection_order) - 1:
             select_menu = discord.ui.Select(
                 placeholder="Select a player",
                 options=[
@@ -62,19 +73,16 @@ class TeamSelectionView(discord.ui.View):
                 if self.timeout_task:
                     self.timeout_task.cancel()
                 await self.select_callback(interaction, selected_id)
-                await self.update_selection_message(message)
+                if self.current_selection_index < len(self.selection_order) - 1:
+                    await self.update_selection_message(message)
                 await interaction.response.defer()
 
             select_menu.callback = select_callback
             view.add_item(select_menu)
 
-        try:
-            await message.edit(content=message_content, view=view)
-        except discord.HTTPException as e:
-            logging.error(f"Failed to edit selection message: {e}")
-            return
+        await message.edit(content=message_content, view=view)
 
-        if available_players:
+        if available_players and self.current_selection_index < len(self.selection_order) - 1:
             await self.start_timeout()
 
     async def select_callback(self, interaction: discord.Interaction, selected_id: str):
@@ -86,11 +94,23 @@ class TeamSelectionView(discord.ui.View):
         self.current_selection_index += 1
         self.last_picker = self.current_captain_index
 
-        if self.current_selection_index >= len(self.selection_order):
+        available_players = [p for p in self.players if p.discord_id not in self.red_team + self.blue_team]
+        if len(available_players) == 1:
+            await self.assign_last_player(available_players[0].discord_id)
+        elif self.current_selection_index >= len(self.selection_order):
             await self.end_selection(interaction.channel)
         else:
             self.current_captain_index = 1 - self.current_captain_index
             await self.update_selection_message(self.selection_message)
+
+    async def assign_last_player(self, last_player_id: str):
+        if self.last_picker == 0:
+            self.blue_team.append(last_player_id)
+        else:
+            self.red_team.append(last_player_id)
+
+        self.current_selection_index += 1
+        await self.end_selection(self.selection_message.channel)
 
     async def start_timeout(self):
         if self.timeout_task:
@@ -105,50 +125,90 @@ class TeamSelectionView(discord.ui.View):
             pass
 
     async def on_timeout(self):
-        if not self.selection_message:
+        available_players = [p for p in self.players if p.discord_id not in self.red_team + self.blue_team]
+
+        if len(available_players) == 1:
+            await self.assign_last_player(available_players[0].discord_id)
             return
 
+        selected_player = random.choice(available_players)
+        if self.current_captain_index == 0:
+            self.red_team.append(selected_player.discord_id)
+        else:
+            self.blue_team.append(selected_player.discord_id)
+
+        self.current_selection_index += 1
+        self.last_picker = self.current_captain_index
+
         available_players = [p for p in self.players if p.discord_id not in self.red_team + self.blue_team]
-        if available_players:
-            selected_player = random.choice(available_players)
-            if self.current_captain_index == 0:
-                self.red_team.append(selected_player.discord_id)
-            else:
-                self.blue_team.append(selected_player.discord_id)
-
-            self.current_selection_index += 1
-            self.last_picker = self.current_captain_index
-
-            if self.current_selection_index >= len(self.selection_order):
-                await self.end_selection(self.selection_message.channel)
-            else:
-                self.current_captain_index = 1 - self.current_captain_index
-                await self.update_selection_message(self.selection_message)
+        if len(available_players) == 1:
+            await self.assign_last_player(available_players[0].discord_id)
+        elif self.current_selection_index >= len(self.selection_order):
+            await self.end_selection(self.selection_message.channel)
+        else:
+            self.current_captain_index = 1 - self.current_captain_index
+            await self.update_selection_message(self.selection_message)
 
     async def end_selection(self, channel: discord.abc.Messageable):
-        side_selector_id = self.captains[1 - self.last_picker]
-        side_view = SideSelectionView(self.match_id, self.red_team, self.blue_team, side_selector_id)
+        guild = channel.guild
+        match_category = discord.utils.get(guild.categories, name=self.match_id)
 
-        completion_message = (
-            f"**Team Selection Complete!**\n\n"
-            f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])}\n"
-            f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])}\n\n"
-            f"Next: Side selection by <@{side_selector_id}>"
+        lobby_vc = discord.utils.get(guild.voice_channels, name="Lobby", category=match_category)
+        if lobby_vc:
+            await lobby_vc.delete()
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(connect=False),
+            guild.me: discord.PermissionOverwrite(connect=True, manage_channels=True),
+        }
+        # for member_id in self.red_team:
+        #     member = guild.get_member(int(member_id))
+        #     if member:
+        #         overwrites[member] = discord.PermissionOverwrite(connect=True)
+
+        red_vc = await guild.create_voice_channel(
+            name="Red Team",
+            category=match_category,
+            overwrites=overwrites,
+            user_limit=5
         )
 
-        try:
-            await self.selection_message.edit(content=completion_message, view=None)
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(connect=False),
+            guild.me: discord.PermissionOverwrite(connect=True, manage_channels=True),
+        }
+        # for member_id in self.blue_team:
+        #     member = guild.get_member(int(member_id))
+        #     if member:
+        #         overwrites[member] = discord.PermissionOverwrite(connect=True)
+
+        blue_vc = await guild.create_voice_channel(
+            name="Blue Team",
+            category=match_category,
+            overwrites=overwrites,
+            user_limit=5
+        )
+
+        side_selector_id = self.captains[1 - self.last_picker]
+        side_view = SideSelectionView(self.match_id, self.red_team, self.blue_team, side_selector_id, red_vc, blue_vc)
+
+        if self.selection_message:
             await side_view.update_message(self.selection_message)
-        except discord.HTTPException as e:
-            logging.error(f"Failed to transition to side selection: {e}")
+        else:
+            await channel.send("Error: Selection message not found. Proceeding with new message.")
+            new_message = await channel.send("Starting side selection...")
+            await side_view.update_message(new_message)
+
 
 class SideSelectionView(discord.ui.View):
-    def __init__(self, match_id: str, red_team: List[str], blue_team: List[str], side_selector_id: str):
+    def __init__(self, match_id: str, red_team: List[str], blue_team: List[str], side_selector_id: str, red_vc: discord.VoiceChannel, blue_vc: discord.VoiceChannel):
         super().__init__(timeout=None)
         self.match_id = match_id
         self.red_team = red_team
         self.blue_team = blue_team
         self.side_selector_id = side_selector_id
+        self.red_vc = red_vc
+        self.blue_vc = blue_vc
         self.red_side = None
         self.blue_side = None
         self.timeout_task = None
@@ -166,9 +226,12 @@ class SideSelectionView(discord.ui.View):
             f"**Teams:**\n"
             f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])}\n"
             f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])}\n\n"
+            f"**Voice Channels:**\n"
+            f"🔴 Red Team: {self.red_vc.mention}\n"
+            f"🔵 Blue Team: {self.blue_vc.mention}\n\n"
             f"**Side Selection:**\n"
             f"{side_selector_team} Team Captain (<@{self.side_selector_id}>), please select your side:\n"
-            f"Time remaining: 15 seconds"
+            f"Time remaining: 30 seconds"
         )
 
         view = discord.ui.View()
@@ -211,12 +274,7 @@ class SideSelectionView(discord.ui.View):
         view.add_item(attack_button)
         view.add_item(defense_button)
 
-        try:
-            await message.edit(content=message_content, view=view)
-            logging.info(f"Updated message for side selection in match {self.match_id}")
-        except discord.HTTPException as e:
-            logging.error(f"Failed to edit message for side selection in match {self.match_id}: {e}")
-            return
+        await message.edit(content=message_content, view=view)
 
         await self.start_timeout()
 
@@ -224,7 +282,6 @@ class SideSelectionView(discord.ui.View):
         if not self.red_side or not self.blue_side:
             self.red_side = random.choice(["attack", "defense"])
             self.blue_side = "defense" if self.red_side == "attack" else "attack"
-            logging.info(f"Side selection timeout for {self.match_id}: Red={self.red_side}, Blue={self.blue_side}")
 
         if self.last_message:
             await self.check_sides(self.last_message)
@@ -233,92 +290,33 @@ class SideSelectionView(discord.ui.View):
         if self.timeout_task:
             self.timeout_task.cancel()
         self.timeout_task = asyncio.create_task(self._timeout_handler())
-        logging.info(f"Started timeout for side selection in match {self.match_id}")
 
     async def _timeout_handler(self):
-        try:
-            await asyncio.sleep(15)
-            await self.on_timeout()
-        except asyncio.CancelledError:
-            logging.info(f"Timeout cancelled for side selection in match {self.match_id}")
+        await asyncio.sleep(30)
+        await self.on_timeout()
 
     async def check_sides(self, interaction: Union[discord.Interaction, discord.Message]):
         if self.red_side and self.blue_side:
-            try:
-                guild = interaction.guild if isinstance(interaction, discord.Interaction) else interaction.guild
-                channel = interaction.channel if isinstance(interaction, discord.Interaction) else interaction.channel
-                match_category = channel.category
-                if not match_category:
-                    raise ValueError("Match category not found")
+            score_view = ScoreSubmissionView(self.match_id, self.red_team, self.blue_team)
+            message_content = (
+                f"**Match Setup Complete!**\n\n"
+                f"**Captains:**\n"
+                f"🔴 Red Team Captain: <@{self.red_team[0]}>\n"
+                f"🔵 Blue Team Captain: <@{self.blue_team[0]}>\n\n"
+                f"**Teams:**\n"
+                f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])} ({self.red_side.title()})\n"
+                f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])} ({self.blue_side.title()})\n\n"
+                f"**Voice Channels:**\n"
+                f"🔴 Red Team: {self.red_vc.mention}\n"
+                f"🔵 Blue Team: {self.blue_vc.mention}\n\n"
+                f"**Score Submission:**\n"
+                f"Captains, please submit the match score:"
+            )
 
-                overwrites = {
-                    guild.default_role: discord.PermissionOverwrite(connect=False),
-                    guild.me: discord.PermissionOverwrite(connect=True, manage_channels=True),
-                }
-                for member_id in self.red_team:
-                    member = guild.get_member(int(member_id))
-                    if member:
-                        overwrites[member] = discord.PermissionOverwrite(connect=True)
-
-                red_vc = await guild.create_voice_channel(
-                    name=f"Red Team",
-                    category=match_category,
-                    overwrites=overwrites,
-                    user_limit=5
-                )
-
-                overwrites = {
-                    guild.default_role: discord.PermissionOverwrite(connect=False),
-                    guild.me: discord.PermissionOverwrite(connect=True, manage_channels=True),
-                }
-                for member_id in self.blue_team:
-                    member = guild.get_member(int(member_id))
-                    if member:
-                        overwrites[member] = discord.PermissionOverwrite(connect=True)
-
-                blue_vc = await guild.create_voice_channel(
-                    name=f"Blue Team",
-                    category=match_category,
-                    overwrites=overwrites,
-                    user_limit=5
-                )
-
-                score_view = ScoreSubmissionView(self.match_id, self.red_team, self.blue_team)
-                
-                message_content = (
-                    f"**Match Setup Complete!**\n\n"
-                    f"**Captains:**\n"
-                    f"🔴 Red Team Captain: <@{self.red_team[0]}>\n"
-                    f"🔵 Blue Team Captain: <@{self.blue_team[0]}>\n\n"
-                    f"**Teams:**\n"
-                    f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])} ({self.red_side.title()})\n"
-                    f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])} ({self.blue_side.title()})\n\n"
-                    f"**Voice Channels:**\n"
-                    f"🔴 Red Team: {red_vc.mention} (5 players max)\n"
-                    f"🔵 Blue Team: {blue_vc.mention} (5 players max)\n\n"
-                    f"**Score Submission:**\n"
-                    f"Captains, please submit the match score:"
-                )
-
-                if isinstance(interaction, discord.Message):
-                    await interaction.edit(content=message_content, view=score_view)
-                else:
-                    await interaction.message.edit(content=message_content, view=score_view)
-
-            except Exception as e:
-                score_view = ScoreSubmissionView(self.match_id, self.red_team, self.blue_team)
-                error_message = (
-                    f"**Error creating voice channels!**\n\n"
-                    f"**Teams:**\n"
-                    f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])} ({self.red_side.title()})\n"
-                    f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])} ({self.blue_side.title()})\n\n"
-                    f"Please contact an administrator to create the voice channels manually."
-                )
-
-                if isinstance(interaction, discord.Message):
-                    await interaction.edit(content=error_message, view=score_view)
-                else:
-                    await interaction.message.edit(content=error_message, view=score_view)
+            if isinstance(interaction, discord.Message):
+                await interaction.edit(content=message_content, view=score_view)
+            else:
+                await interaction.message.edit(content=message_content, view=score_view)
 
 class ScoreSubmissionView(discord.ui.View):
     def __init__(self, match_id: str, red_team: List[str], blue_team: List[str]):
@@ -410,6 +408,7 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
         view=view,
     )
 
+    await asyncio.sleep(10)
     await view.update_selection_message(initial_message)
 
 class MatchCog(commands.Cog):
