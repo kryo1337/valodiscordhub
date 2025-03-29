@@ -10,6 +10,9 @@ class Match(BaseModel):
     captain_red: str
     captain_blue: str
     lobby_master: str
+    defense_start: Optional[Literal["red", "blue"]] = None
+    red_score: Optional[int] = None
+    blue_score: Optional[int] = None
     result: Optional[Literal["red", "blue", "cancelled"]] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     ended_at: Optional[datetime] = None

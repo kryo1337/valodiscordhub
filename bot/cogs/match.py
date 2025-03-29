@@ -4,15 +4,10 @@ from typing import List, Optional, Union
 from datetime import datetime
 import asyncio
 import random
-# import logging
-# import sys
 from db.models.queue import QueueEntry
+from utils.db import update_match_defense, get_match, update_match_teams, update_match_result
+from utils.db import create_match as create_match_db
 
-# logger = logging.getLogger('TeamSelection')
-# logger.setLevel(logging.INFO)
-# handler = logging.StreamHandler(sys.stdout)
-# handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-# logger.addHandler(handler)
 
 class TeamSelectionView(discord.ui.View):
     def __init__(self, match_id: str, players: List[QueueEntry], captains: List[str]):
@@ -153,6 +148,12 @@ class TeamSelectionView(discord.ui.View):
         guild = channel.guild
         match_category = discord.utils.get(guild.categories, name=self.match_id)
 
+        update_match_teams(
+            match_id=self.match_id,
+            players_red=self.red_team,
+            players_blue=self.blue_team
+        )
+
         lobby_vc = discord.utils.get(guild.voice_channels, name="Lobby", category=match_category)
         if lobby_vc:
             await lobby_vc.delete()
@@ -218,17 +219,20 @@ class SideSelectionView(discord.ui.View):
         self.last_message = message
         side_selector_team = "Red" if self.side_selector_id in self.red_team else "Blue"
 
+        match = get_match(self.match_id)
+
         message_content = (
             f"**Team Selection Complete!**\n\n"
             f"**Captains:**\n"
             f"🔴 Red Team Captain: <@{self.red_team[0]}>\n"
-            f"🔵 Blue Team Captain: <@{self.blue_team[0]}>\n\n"
+            f"🔵 Blue Team Captain: <@{self.blue_team[0]}>\n"
             f"**Teams:**\n"
             f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])}\n"
             f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])}\n\n"
             f"**Voice Channels:**\n"
             f"🔴 Red Team: {self.red_vc.mention}\n"
             f"🔵 Blue Team: {self.blue_vc.mention}\n\n"
+            f"🎮 Lobby Master: <@{match.lobby_master}>\n\n"
             f"**Side Selection:**\n"
             f"{side_selector_team} Team Captain (<@{self.side_selector_id}>), please select your side:\n"
             f"Time remaining: 30 seconds"
@@ -297,6 +301,13 @@ class SideSelectionView(discord.ui.View):
 
     async def check_sides(self, interaction: Union[discord.Interaction, discord.Message]):
         if self.red_side and self.blue_side:
+            update_match_defense(
+                match_id=self.match_id,
+                defense_start="red" if self.red_side == "defense" else "blue"
+            )
+            
+            match = get_match(self.match_id)
+
             score_view = ScoreSubmissionView(self.match_id, self.red_team, self.blue_team)
             message_content = (
                 f"**Match Setup Complete!**\n\n"
@@ -309,6 +320,7 @@ class SideSelectionView(discord.ui.View):
                 f"**Voice Channels:**\n"
                 f"🔴 Red Team: {self.red_vc.mention}\n"
                 f"🔵 Blue Team: {self.blue_vc.mention}\n\n"
+                f"🎮 Lobby Master: <@{match.lobby_master}>\n\n"
                 f"**Score Submission:**\n"
                 f"Captains, please submit the match score:"
             )
@@ -324,64 +336,101 @@ class ScoreSubmissionView(discord.ui.View):
         self.match_id = match_id
         self.red_team = red_team
         self.blue_team = blue_team
-        self.red_score: Optional[int] = None
-        self.blue_score: Optional[int] = None
+        self.red_score: Optional[tuple] = None
+        self.blue_score: Optional[tuple] = None
+        self.red_captain = red_team[0]
+        self.blue_captain = blue_team[0]
 
     @discord.ui.button(label="Submit Red Team Score", style=discord.ButtonStyle.danger)
     async def submit_red_score(self, interaction: discord.Interaction, _: discord.ui.Button):
-        if str(interaction.user.id) not in self.red_team:
-            await interaction.response.send_message("Only Red Team members can submit their score!", ephemeral=True)
+        if str(interaction.user.id) != self.red_captain:
+            await interaction.response.send_message("Only the Red Team captain can submit the score!", ephemeral=True)
             return
-        modal = ScoreModal("Red Team Score", self)
+        modal = ScoreModal("Red Team Score", self, "red")
         await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="Submit Blue Team Score", style=discord.ButtonStyle.primary)
     async def submit_blue_score(self, interaction: discord.Interaction, _: discord.ui.Button):
-        if str(interaction.user.id) not in self.blue_team:
-            await interaction.response.send_message("Only Blue Team members can submit their score!", ephemeral=True)
+        if str(interaction.user.id) != self.blue_captain:
+            await interaction.response.send_message("Only the Blue Team captain can submit the score!", ephemeral=True)
             return
-        modal = ScoreModal("Blue Team Score", self)
+        modal = ScoreModal("Blue Team Score", self, "blue")
         await interaction.response.send_modal(modal)
+
+    def validate_score(self, score: int) -> bool:
+        return 0 <= score <= 13
 
     async def check_scores(self, interaction: discord.Interaction):
         if self.red_score is not None and self.blue_score is not None:
-            if self.red_score == self.blue_score:
+            if not self.validate_score(self.red_score) or not self.validate_score(self.blue_score):
+                await interaction.channel.send("Invalid scores submitted! Scores must be between 0 and 13.")
+                self.red_score = None
+                self.blue_score = None
+                return
+
+            if self.red_score != self.blue_score:
                 admin_role = discord.utils.get(interaction.guild.roles, name="Admin")
-                if admin_role:
-                    await interaction.channel.send(
-                        f"{admin_role.mention} Score discrepancy detected!\n"
-                        f"🔴 Red Team submitted: {self.red_score}\n"
-                        f"🔵 Blue Team submitted: {self.blue_score}"
-                    )
+                await interaction.channel.send(
+                    f"{admin_role.mention} Score discrepancy detected!\n"
+                    f"🔴 Red Team Captain <@{self.red_captain}> submitted: {self.red_score[0]}-{self.red_score[1]}\n"
+                    f"🔵 Blue Team Captain <@{self.blue_captain}> submitted: {self.blue_score[0]}-{self.blue_score[1]}\n"
+                    f"Please verify the correct score."
+                )
             else:
+                red_score, blue_score = self.red_score
+                winner = "red" if red_score > blue_score else "blue"
+                
+                update_match_result(
+                    match_id=self.match_id,
+                    red_score=red_score,
+                    blue_score=blue_score,
+                    result=winner
+                )
+
                 await interaction.channel.send(
                     f"**Match Complete!**\n"
-                    f"🔴 Red Team: {self.red_score}\n"
-                    f"🔵 Blue Team: {self.blue_score}"
+                    f"Scores verified by both captains:\n"
+                    f"🔴 Red Team: {red_score}\n"
+                    f"🔵 Blue Team: {blue_score}\n"
+                    f"**{winner.title()} Team Wins!**"
                 )
 
 class ScoreModal(discord.ui.Modal):
-    def __init__(self, title: str, view: ScoreSubmissionView):
+    def __init__(self, title: str, view: ScoreSubmissionView, team: str):
         super().__init__(title=title)
         self.view = view
-        self.score = discord.ui.TextInput(
-            label="Enter the score",
-            placeholder="Enter the number of rounds won",
+        self.team = team
+        self.team_score = discord.ui.TextInput(
+            label="Your team's score",
+            placeholder="Enter your team's rounds won (0-13)",
             required=True,
         )
-        self.add_item(self.score)
+        self.opponent_score = discord.ui.TextInput(
+            label="Opponent's score",
+            placeholder="Enter opponent's rounds won (0-13)",
+            required=True,
+        )
+        self.add_item(self.team_score)
+        self.add_item(self.opponent_score)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            score = int(self.score.value)
-            if str(interaction.user.id) in self.view.red_team:
-                self.view.red_score = score
-            elif str(interaction.user.id) in self.view.blue_team:
-                self.view.blue_score = score
+            team_score = int(self.team_score.value)
+            opponent_score = int(self.opponent_score.value)
+            
+            if not self.view.validate_score(team_score) or not self.view.validate_score(opponent_score):
+                await interaction.response.send_message("Invalid scores! Scores must be between 0 and 13.", ephemeral=True)
+                return
+
+            if self.team == "red":
+                self.view.red_score = (team_score, opponent_score)
+            else:
+                self.view.blue_score = (team_score, opponent_score)
+
             await self.view.check_scores(interaction)
             await interaction.response.send_message("Score submitted!", ephemeral=True)
         except ValueError:
-            await interaction.response.send_message("Please enter a valid number!", ephemeral=True)
+            await interaction.response.send_message("Please enter valid numbers!", ephemeral=True)
 
 async def create_match(guild: discord.Guild, rank_group: str, players: List[QueueEntry]):
     match_id = f"match_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -394,6 +443,16 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
     )
 
     captains = random.sample([p.discord_id for p in players], 2)
+    lobby_master = random.choice(captains)
+    
+    create_match_db(
+        match_id=match_id,
+        players_red=[],
+        players_blue=[],
+        captain_red=captains[0],
+        captain_blue=captains[1],
+        lobby_master=lobby_master
+    )
     
     view = TeamSelectionView(match_id, players, captains)
     

@@ -23,23 +23,34 @@ def create_indexes(db):
     db.players.create_index([("riot_id", ASCENDING)], unique=True)
     db.players.create_index([("rank", ASCENDING)])
     db.players.create_index([("points", DESCENDING)])
+    db.players.create_index([("winrate", DESCENDING)])
+    db.players.create_index([("matches_played", DESCENDING)])
     
     db.matches.create_index([("match_id", ASCENDING)], unique=True)
     db.matches.create_index([("created_at", DESCENDING)])
+    db.matches.create_index([("ended_at", DESCENDING)])
     db.matches.create_index([("result", ASCENDING)])
     db.matches.create_index([("players_red", ASCENDING)])
     db.matches.create_index([("players_blue", ASCENDING)])
+    db.matches.create_index([("captain_red", ASCENDING)])
+    db.matches.create_index([("captain_blue", ASCENDING)])
+    db.matches.create_index([("lobby_master", ASCENDING)])
+    db.matches.create_index([("defense_start", ASCENDING)])
 
     db.leaderboards.create_index([("rank_group", ASCENDING), ("players.discord_id", ASCENDING)], unique=True)
     db.leaderboards.create_index([("last_updated", DESCENDING)])
+    db.leaderboards.create_index([("rank_group", ASCENDING), ("players.points", DESCENDING)])
 
     db.queues.create_index([("rank_group", ASCENDING)], unique=True)
     db.queues.create_index([("players.discord_id", ASCENDING)])
+    db.queues.create_index([("players.joined_at", ASCENDING)])
 
     db.admin_logs.create_index([("timestamp", DESCENDING)])
     db.admin_logs.create_index([("action", ASCENDING)])
     db.admin_logs.create_index([("admin_discord_id", ASCENDING)])
     db.admin_logs.create_index([("target_discord_id", ASCENDING)])
+    db.admin_logs.create_index([("match_id", ASCENDING)])
+    db.admin_logs.create_index([("action", ASCENDING), ("timestamp", DESCENDING)])
 
 try:
     print(f"Attempting to connect to MongoDB with URI: {MONGO_URI}")

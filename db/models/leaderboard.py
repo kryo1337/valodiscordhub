@@ -13,7 +13,7 @@ class LeaderboardEntry(BaseModel):
 
 
 class Leaderboard(BaseModel):
-    rank_group: Literal["iron-plat", "dia-asc", "imm1-radiant"]
+    rank_group: Literal["iron-plat", "dia-asc", "imm-radiant"]
     players: List[LeaderboardEntry] = Field(default_factory=list)
     last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

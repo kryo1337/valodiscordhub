@@ -32,6 +32,7 @@ class QueueView(discord.ui.View):
     ):
         current_time = datetime.now()
         user_id = str(interaction.user.id)
+        matched_players = []
         
         if user_id in self.last_interaction:
             time_diff = (current_time - self.last_interaction[user_id]).total_seconds()
@@ -113,11 +114,16 @@ class QueueView(discord.ui.View):
         except Exception as e:
             await interaction.channel.send(f"Error updating queue message: {str(e)}")
 
-        await create_match(interaction.guild, self.rank_group, matched_players)
+        if matched_players:
+            await create_match(interaction.guild, self.rank_group, matched_players)
 
 class QueueCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.bot.add_listener(self.on_ready)
+
+    async def on_ready(self):
+        await self.setup_existing_queues()
 
     async def setup_existing_queues(self):
         guild = self.bot.get_guild(GUILD_ID)
@@ -132,17 +138,21 @@ class QueueCog(commands.Cog):
         for rank_group in rank_groups:
             channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
             if channel:
-                async for message in channel.history(limit=1):
-                    queue = get_queue(rank_group) or Queue(rank_group=rank_group, players=[])
-                    view = QueueView(rank_group)
-                    await message.edit(
-                        content=f"**{rank_group.upper()} Queue**\n"
-                                f"Click the button to join/leave the queue!\n"
-                                f"Current players in queue: {len(queue.players)}\n"
-                                f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players]) if queue.players else 'None'}",
-                        view=view,
-                    )
-                    break
+                async for message in channel.history(limit=None):
+                    try:
+                        await message.delete()
+                    except discord.NotFound:
+                        pass
+                
+                queue = get_queue(rank_group) or Queue(rank_group=rank_group, players=[])
+                view = QueueView(rank_group)
+                await channel.send(
+                    content=f"**{rank_group.upper()} Queue**\n"
+                            f"Click the button to join/leave the queue!\n"
+                            f"Current players in queue: {len(queue.players)}\n"
+                            f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players]) if queue.players else 'None'}",
+                    view=view,
+                )
 
     @app_commands.command(name="test_queue")
     @app_commands.default_permissions(administrator=True)
@@ -252,4 +262,3 @@ class QueueCog(commands.Cog):
 async def setup(bot):
     cog = QueueCog(bot)
     await bot.add_cog(cog)
-    await cog.setup_existing_queues()

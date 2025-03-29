@@ -3,6 +3,8 @@ import os
 from typing import Optional, List
 from db.models.player import Player
 from db.models.queue import Queue, QueueEntry
+from db.models.match import Match
+from datetime import datetime, timezone
 
 MONGO_URI = os.getenv("MONGODB_URI")
 
@@ -57,4 +59,69 @@ def add_to_queue(rank_group: str, discord_id: str) -> Queue:
 def remove_player_from_queue(rank_group: str, discord_id: str) -> Queue:
     queue = get_queue(rank_group)
     queue.players = [p for p in queue.players if p.discord_id != discord_id]
-    return update_queue(rank_group, queue.players) 
+    return update_queue(rank_group, queue.players)
+
+def create_match(match_id: str, players_red: List[str], players_blue: List[str], 
+                captain_red: str, captain_blue: str, lobby_master: str) -> Match:
+    match = Match(
+        match_id=match_id,
+        players_red=players_red,
+        players_blue=players_blue,
+        captain_red=captain_red,
+        captain_blue=captain_blue,
+        lobby_master=lobby_master
+    )
+    db.matches.insert_one(match.model_dump())
+    return match
+
+def update_match_teams(match_id: str, players_red: List[str], players_blue: List[str]) -> Optional[Match]:
+    result = db.matches.find_one_and_update(
+        {"match_id": match_id},
+        {
+            "$set": {
+                "players_red": players_red,
+                "players_blue": players_blue
+            }
+        },
+        return_document=True
+    )
+    if result:
+        return Match(**result)
+    return None
+
+def update_match_defense(match_id: str, defense_start: str) -> Optional[Match]:
+    result = db.matches.find_one_and_update(
+        {"match_id": match_id},
+        {
+            "$set": {
+                "defense_start": defense_start
+            }
+        },
+        return_document=True
+    )
+    if result:
+        return Match(**result)
+    return None
+
+def update_match_result(match_id: str, red_score: int, blue_score: int, result: str) -> Optional[Match]:
+    result = db.matches.find_one_and_update(
+        {"match_id": match_id},
+        {
+            "$set": {
+                "red_score": red_score,
+                "blue_score": blue_score,
+                "result": result,
+                "ended_at": datetime.now(timezone.utc)
+            }
+        },
+        return_document=True
+    )
+    if result:
+        return Match(**result)
+    return None
+
+def get_match(match_id: str) -> Optional[Match]:
+    match_data = db.matches.find_one({"match_id": match_id})
+    if match_data:
+        return Match(**match_data)
+    return None 
