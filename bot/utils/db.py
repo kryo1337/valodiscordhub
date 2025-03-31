@@ -4,6 +4,7 @@ from typing import Optional, List
 from db.models.player import Player
 from db.models.queue import Queue, QueueEntry
 from db.models.match import Match
+from db.models.leaderboard import Leaderboard, LeaderboardEntry
 from datetime import datetime, timezone
 
 MONGO_URI = os.getenv("MONGODB_URI")
@@ -124,4 +125,37 @@ def get_match(match_id: str) -> Optional[Match]:
     match_data = db.matches.find_one({"match_id": match_id})
     if match_data:
         return Match(**match_data)
-    return None 
+    return None
+
+def get_leaderboard(rank_group: str) -> Leaderboard:
+    leaderboard_data = db.leaderboards.find_one({"rank_group": rank_group})
+    if leaderboard_data:
+        return Leaderboard(**leaderboard_data)
+    return Leaderboard(rank_group=rank_group)
+
+def update_leaderboard(rank_group: str, players: List[LeaderboardEntry]) -> Leaderboard:
+    leaderboard = Leaderboard(rank_group=rank_group, players=players)
+    db.leaderboards.update_one(
+        {"rank_group": rank_group},
+        {"$set": leaderboard.model_dump()},
+        upsert=True
+    )
+    return leaderboard
+
+def get_player_rank(rank_group: str, discord_id: str) -> Optional[LeaderboardEntry]:
+    leaderboard = get_leaderboard(rank_group)
+    for player in leaderboard.players:
+        if player.discord_id == discord_id:
+            return player
+    return None
+
+def get_leaderboard_page(rank_group: str, page: int = 1, page_size: int = 10) -> List[LeaderboardEntry]:
+    leaderboard = get_leaderboard(rank_group)
+    sorted_players = sorted(leaderboard.players, key=lambda x: x.points, reverse=True)
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    return sorted_players[start_idx:end_idx]
+
+def get_total_pages(rank_group: str, page_size: int = 10) -> int:
+    leaderboard = get_leaderboard(rank_group)
+    return (len(leaderboard.players) + page_size - 1) // page_size 
