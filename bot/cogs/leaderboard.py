@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 
 load_dotenv()
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
-UPDATE_INTERVAL = 60
 
 class LeaderboardCog(commands.Cog):
     def __init__(self, bot):
@@ -19,13 +18,8 @@ class LeaderboardCog(commands.Cog):
         self.current_page_sizes = {}
         self.last_update = None
         self.bot.add_listener(self.on_ready)
-        self.auto_update_leaderboard.start()
 
-    def cog_unload(self):
-        self.auto_update_leaderboard.cancel()
-
-    @tasks.loop(seconds=UPDATE_INTERVAL)
-    async def auto_update_leaderboard(self):
+    async def update_leaderboard(self):
         try:
             guild = self.bot.get_guild(GUILD_ID)
             if not guild:
@@ -40,41 +34,23 @@ class LeaderboardCog(commands.Cog):
                 return
 
             self.last_update = datetime.now(timezone.utc)
-
-            await guild.chunk()
             
             for channel_id, data in self.leaderboard_channels.items():
                 channel = self.bot.get_channel(channel_id)
                 if channel:
-                    for member in guild.members:
-                        await self.update_leaderboard_display(channel, str(member.id))
+                    rank_group = data["rank_group"]
+                    all_players = get_leaderboard_page(rank_group, 1, 1000)
+                    sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
+                    
+                    if sorted_players:
+                        first_player = sorted_players[0]
+                        await self.update_leaderboard_display(channel, str(first_player.discord_id))
                     break
         except Exception as e:
-            print(f"Error in auto_update_leaderboard: {e}")
-
-    @auto_update_leaderboard.before_loop
-    async def before_auto_update(self):
-        await self.bot.wait_until_ready()
-
-    def get_time_difference(self):
-        if not self.last_update:
-            return "Never"
-        
-        now = datetime.now(timezone.utc)
-        diff = now - self.last_update
-        
-        if diff.total_seconds() < 60:
-            return "just now"
-        elif diff.total_seconds() < 3600:
-            minutes = int(diff.total_seconds() / 60)
-            return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
-        else:
-            hours = int(diff.total_seconds() / 3600)
-            return f"{hours} hour{'s' if hours != 1 else ''} ago"
+            print(f"Error in update_leaderboard: {e}")
 
     async def on_ready(self):
         await self.setup_existing_leaderboards()
-        await self.auto_update_leaderboard()
 
     async def setup_existing_leaderboards(self):
         guild = self.bot.get_guild(GUILD_ID)
@@ -98,7 +74,14 @@ class LeaderboardCog(commands.Cog):
                 "page": 1
             }
             self.current_page_sizes[channel.id] = 10
-            await self.update_leaderboard_display(channel)
+            
+            rank_group = "imm-radiant"
+            all_players = get_leaderboard_page(rank_group, 1, 1000)
+            sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
+            
+            if sorted_players:
+                first_player = sorted_players[0]
+                await self.update_leaderboard_display(channel, str(first_player.discord_id))
 
     @app_commands.command(name="setup_leaderboard")
     @app_commands.default_permissions(administrator=True)
@@ -151,34 +134,51 @@ class LeaderboardCog(commands.Cog):
 
         await channel.purge()
 
+        all_players = get_leaderboard_page(rank_group, 1, 1000)
+        sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
+        
+        user_position = None
         if user_id:
-            user_position = get_player_rank(rank_group, user_id)
+            for i, player in enumerate(sorted_players, start=1):
+                if str(player.discord_id) == user_id:
+                    user_position = (i, player)
+                    break
+
             if user_position:
+                position, player = user_position
                 position_embed = discord.Embed(
                     title="Your Position",
                     color=discord.Color.green()
                 )
-                streak_text = f"🔥 {user_position.streak}" if user_position.streak >= 3 else ""
+                streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
+                try:
+                    discord_user = await channel.guild.fetch_member(int(player.discord_id))
+                    name = discord_user.display_name if discord_user else f"<@{player.discord_id}>"
+                except:
+                    name = f"<@{player.discord_id}>"
+
                 position_embed.add_field(
-                    name=f"Rank: {user_position.rank}",
-                    value=f"Points: {user_position.points} | Winrate: {user_position.winrate}% | Matches: {user_position.matches_played} | {streak_text}",
+                    name=f"{name} - Rank: {player.rank}",
+                    value=f"Position: #{position} | Points: {player.points} | Winrate: {player.winrate}% | Matches: {player.matches_played} | {streak_text}",
                     inline=False
                 )
                 await channel.send(embed=position_embed)
 
-        players = get_leaderboard_page(rank_group, page, page_size)
-        total_pages = get_total_pages(rank_group, page_size)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        players = sorted_players[start_idx:end_idx]
+        total_pages = (len(sorted_players) + page_size - 1) // page_size
 
         embed = discord.Embed(
             title=f"🏆 Leaderboard - {rank_group.upper()}",
             color=discord.Color.blue()
         )
 
-        for i, player in enumerate(players, start=(page-1)*page_size + 1):
+        for i, player in enumerate(players, start=start_idx + 1):
             streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
             try:
                 discord_user = await channel.guild.fetch_member(int(player.discord_id))
-                name = discord_user.display_name
+                name = discord_user.display_name if discord_user else f"<@{player.discord_id}>"
             except:
                 name = f"<@{player.discord_id}>"
             
@@ -198,6 +198,22 @@ class LeaderboardCog(commands.Cog):
         if user_id:
             view.last_user_id = user_id
         await channel.send(embed=embed, view=view)
+
+    def get_time_difference(self):
+        if not self.last_update:
+            return "Never"
+        
+        now = datetime.now(timezone.utc)
+        diff = now - self.last_update
+        
+        if diff.total_seconds() < 60:
+            return "just now"
+        elif diff.total_seconds() < 3600:
+            minutes = int(diff.total_seconds() / 60)
+            return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+        else:
+            hours = int(diff.total_seconds() / 3600)
+            return f"{hours} hour{'s' if hours != 1 else ''} ago"
 
     @app_commands.command(name="my_rank")
     @app_commands.describe(

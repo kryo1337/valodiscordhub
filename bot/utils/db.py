@@ -127,6 +127,10 @@ def get_match(match_id: str) -> Optional[Match]:
         return Match(**match_data)
     return None
 
+def get_active_matches() -> List[Match]:
+    matches = db.matches.find({"result": None})
+    return [Match(**match) for match in matches]
+
 def get_leaderboard(rank_group: str) -> Leaderboard:
     leaderboard_data = db.leaderboards.find_one({"rank_group": rank_group})
     if leaderboard_data:
@@ -158,4 +162,17 @@ def get_leaderboard_page(rank_group: str, page: int = 1, page_size: int = 10) ->
 
 def get_total_pages(rank_group: str, page_size: int = 10) -> int:
     leaderboard = get_leaderboard(rank_group)
-    return (len(leaderboard.players) + page_size - 1) // page_size 
+    return (len(leaderboard.players) + page_size - 1) // page_size
+
+def get_players_by_rank_group(rank_group: str) -> List[Player]:
+    if rank_group == "iron-plat":
+        ranks = ["Iron", "Bronze", "Silver", "Gold", "Platinum"]
+    elif rank_group == "dia-asc":
+        ranks = ["Diamond", "Ascendant"]
+    elif rank_group == "imm-radiant":
+        ranks = ["Immortal", "Radiant"]
+    else:
+        return []
+    
+    players = db.players.find({"rank": {"$in": ranks}})
+    return [Player(**player) for player in players] 

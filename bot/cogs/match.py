@@ -7,6 +7,9 @@ import random
 from db.models.queue import QueueEntry
 from utils.db import update_match_defense, get_match, update_match_teams, update_match_result
 from utils.db import create_match as create_match_db
+from utils.db import get_leaderboard_page, update_leaderboard
+from db.models.leaderboard import LeaderboardEntry
+from .leaderboard import LeaderboardCog
 
 
 class TeamSelectionView(discord.ui.View):
@@ -360,6 +363,61 @@ class ScoreSubmissionView(discord.ui.View):
     def validate_score(self, score: int) -> bool:
         return 0 <= score <= 13
 
+    async def update_leaderboard_points(self, interaction: discord.Interaction, winner: str):
+        match = get_match(self.match_id)
+        rank_group = match.rank_group
+
+        leaderboard = get_leaderboard(rank_group)
+        current_entries = {str(p.discord_id): p for p in leaderboard.players}
+        updated_entries = []
+
+        all_match_players = self.red_team + self.blue_team
+        player_ranks = {p.discord_id: p.rank for p in match.players}
+
+        winning_team = self.red_team if winner == "red" else self.blue_team
+        for player_id in winning_team:
+            if player_id in current_entries:
+                entry = current_entries[player_id]
+                entry.points += 10
+                entry.matches_played += 1
+                entry.winrate = (entry.winrate * (entry.matches_played - 1) + 100) / entry.matches_played
+                entry.streak = max(0, entry.streak) + 1
+            else:
+                entry = LeaderboardEntry(
+                    discord_id=player_id,
+                    rank=player_ranks.get(player_id, "Unranked"),
+                    points=1010,
+                    matches_played=1,
+                    winrate=100.0,
+                    streak=1
+                )
+            updated_entries.append(entry)
+
+        losing_team = self.blue_team if winner == "red" else self.red_team
+        for player_id in losing_team:
+            if player_id in current_entries:
+                entry = current_entries[player_id]
+                entry.points = max(0, entry.points - 10) 
+                entry.matches_played += 1
+                entry.winrate = (entry.winrate * (entry.matches_played - 1)) / entry.matches_played
+                entry.streak = min(0, entry.streak) - 1
+            else:
+                entry = LeaderboardEntry(
+                    discord_id=player_id,
+                    rank=player_ranks.get(player_id, "Unranked"),
+                    points=990,
+                    matches_played=1,
+                    winrate=0.0,
+                    streak=-1
+                )
+            updated_entries.append(entry)
+
+        update_leaderboard(rank_group, updated_entries)
+
+        leaderboard_cog = interaction.client.get_cog("LeaderboardCog")
+        if leaderboard_cog:
+            await leaderboard_cog.update_leaderboard()
+
     async def check_scores(self, interaction: discord.Interaction):
         if self.red_score is not None and self.blue_score is not None:
             if not self.validate_score(self.red_score) or not self.validate_score(self.blue_score):
@@ -386,6 +444,8 @@ class ScoreSubmissionView(discord.ui.View):
                     blue_score=blue_score,
                     result=winner
                 )
+
+                await self.update_leaderboard_points(interaction, winner)
 
                 await interaction.channel.send(
                     f"**Match Complete!**\n"
