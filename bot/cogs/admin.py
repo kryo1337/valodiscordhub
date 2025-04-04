@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from typing import Optional, Literal
 import os
+import asyncio
 from dotenv import load_dotenv
 from utils.db import get_match, update_match_result, get_active_matches, get_leaderboard, update_leaderboard, get_player
 from db.models.leaderboard import LeaderboardEntry
@@ -150,6 +151,20 @@ class AdminCog(commands.Cog):
             + (f"\n🔴 Red Team: {red_score}\n🔵 Blue Team: {blue_score}" if result != "cancelled" else ""),
             ephemeral=True
         )
+        
+        await asyncio.sleep(5)
+        await self.cleanup_match_channels(interaction.guild, match_id)
+
+    async def cleanup_match_channels(self, guild: discord.Guild, match_id: str):
+        try:
+            match_category = discord.utils.get(guild.categories, name=match_id)
+            if match_category:
+                for channel in match_category.channels:
+                    await channel.delete(reason="Match completed")
+                
+                await match_category.delete(reason="Match completed")
+        except Exception as e:
+            print(f"Error cleaning up match channels: {e}")
 
     @set_result.autocomplete("match_id")
     async def match_id_autocomplete_callback(

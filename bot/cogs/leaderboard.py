@@ -137,33 +137,6 @@ class LeaderboardCog(commands.Cog):
         all_players = get_leaderboard_page(rank_group, 1, 1000)
         sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
         
-        user_position = None
-        if user_id:
-            for i, player in enumerate(sorted_players, start=1):
-                if str(player.discord_id) == user_id:
-                    user_position = (i, player)
-                    break
-
-            if user_position:
-                position, player = user_position
-                position_embed = discord.Embed(
-                    title="Your Position",
-                    color=discord.Color.green()
-                )
-                streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
-                try:
-                    discord_user = await channel.guild.fetch_member(int(player.discord_id))
-                    name = discord_user.display_name if discord_user else f"<@{player.discord_id}>"
-                except:
-                    name = f"<@{player.discord_id}>"
-
-                position_embed.add_field(
-                    name=f"{name} - Rank: {player.rank}",
-                    value=f"Position: #{position} | Points: {player.points} | Winrate: {player.winrate}% | Matches: {player.matches_played} | {streak_text}",
-                    inline=False
-                )
-                await channel.send(embed=position_embed)
-
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         players = sorted_players[start_idx:end_idx]
@@ -182,13 +155,7 @@ class LeaderboardCog(commands.Cog):
             except:
                 name = f"<@{player.discord_id}>"
             
-            is_current_user = user_id and str(player.discord_id) == user_id
-            if is_current_user:
-                name = f"**{name}**"
-                value = f"**Rank: {player.rank} | Points: {player.points} | Winrate: {player.winrate}% | Matches: {player.matches_played} | {streak_text}**"
-            else:
-                value = f"Rank: {player.rank} | Points: {player.points} | Winrate: {player.winrate}% | Matches: {player.matches_played} | {streak_text}"
-            
+            value = f"Rank: {player.rank} | Points: {player.points} | Winrate: {player.winrate}% | Matches: {player.matches_played} | {streak_text}"
             embed.add_field(name=f"{i}. {name}", value=value, inline=False)
 
         update_time = self.get_time_difference()
@@ -215,17 +182,21 @@ class LeaderboardCog(commands.Cog):
             hours = int(diff.total_seconds() / 3600)
             return f"{hours} hour{'s' if hours != 1 else ''} ago"
 
-    @app_commands.command(name="my_rank")
-    @app_commands.describe(
-        rank_group="The rank group to check (iron-plat, dia-asc, imm-radiant)"
-    )
-    async def my_rank(
+    @app_commands.command(name="pos")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def pos(
         self,
-        interaction: discord.Interaction,
-        rank_group: str = "imm-radiant"
+        interaction: discord.Interaction
     ):
-        if rank_group not in ["iron-plat", "dia-asc", "imm-radiant"]:
-            await interaction.response.send_message("Invalid rank group. Choose from: iron-plat, dia-asc, imm-radiant", ephemeral=True)
+        rank_group = None
+        for role in interaction.user.roles:
+            if role.name in ["iron-plat", "dia-asc", "imm-radiant"]:
+                rank_group = role.name
+                break
+
+        if not rank_group:
+            await interaction.response.send_message("You don't have a valid rank group role!", ephemeral=True)
             return
 
         player = get_player_rank(rank_group, str(interaction.user.id))
@@ -233,16 +204,42 @@ class LeaderboardCog(commands.Cog):
             await interaction.response.send_message("You are not in the leaderboard yet!", ephemeral=True)
             return
 
+        all_players = get_leaderboard_page(rank_group, 1, 1000)
+        sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
+        
+        position = None
+        for i, p in enumerate(sorted_players, start=1):
+            if p.discord_id == player.discord_id:
+                position = i
+                break
+
         embed = discord.Embed(
             title="Your Rank",
             color=discord.Color.green()
         )
-        streak_text = f" 🔥" if player.streak >= 3 else ""
+        
+        rank_group_display = {
+            "iron-plat": "Iron - Platinum",
+            "dia-asc": "Diamond - Ascendant",
+            "imm-radiant": "Immortal - Radiant"
+        }
+        embed.title = f"Your Rank - {rank_group_display[rank_group]}"
+        
+        streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
         embed.add_field(
-            name=f"Rank: {player.rank}",
-            value=f"Points: {player.points} | Winrate: {player.winrate}% | Matches: {player.matches_played}{streak_text}",
+            name=f"Position: #{position}",
+            value=f"Rank: {player.rank}\nPoints: {player.points}\nWinrate: {player.winrate}%\nMatches: {player.matches_played} | {streak_text}",
             inline=False
         )
+        
+        if position > 1:
+            points_to_next = sorted_players[position-2].points - player.points
+            embed.add_field(
+                name="Progress to next position",
+                value=f"Need {points_to_next} more points to reach position #{position-1}",
+                inline=False
+            )
+        
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="test_leaderboard")

@@ -7,7 +7,7 @@ import random
 from db.models.queue import QueueEntry
 from utils.db import update_match_defense, get_match, update_match_teams, update_match_result
 from utils.db import create_match as create_match_db
-from utils.db import get_leaderboard_page, update_leaderboard
+from utils.db import get_leaderboard_page, update_leaderboard, get_leaderboard
 from db.models.leaderboard import LeaderboardEntry
 from .leaderboard import LeaderboardCog
 
@@ -454,6 +454,20 @@ class ScoreSubmissionView(discord.ui.View):
                     f"🔵 Blue Team: {blue_score}\n"
                     f"**{winner.title()} Team Wins!**"
                 )
+                
+                await asyncio.sleep(10)
+                await self.cleanup_match_channels(interaction.guild)
+
+    async def cleanup_match_channels(self, guild: discord.Guild):
+        try:
+            match_category = discord.utils.get(guild.categories, name=self.match_id)
+            if match_category:
+                for channel in match_category.channels:
+                    await channel.delete(reason="Match completed")
+                
+                await match_category.delete(reason="Match completed")
+        except Exception as e:
+            print(f"Error cleaning up match channels: {e}")
 
 class ScoreModal(discord.ui.Modal):
     def __init__(self, title: str, view: ScoreSubmissionView, team: str):
@@ -501,9 +515,31 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
     match_vc = await match_category.create_voice_channel(
         name="Lobby", user_limit=10
     )
-
-    captains = random.sample([p.discord_id for p in players], 2)
-    lobby_master = random.choice(captains)
+    
+    leaderboard = get_leaderboard(rank_group)
+    
+    player_ids = [p.discord_id for p in players]
+    
+    leaderboard_players = []
+    for player in leaderboard.players:
+        if player.discord_id in player_ids:
+            leaderboard_players.append(player)
+    
+    sorted_leaderboard_players = sorted(leaderboard_players, key=lambda x: x.points, reverse=True)
+    
+    if len(sorted_leaderboard_players) >= 2:
+        captains = [sorted_leaderboard_players[0].discord_id, sorted_leaderboard_players[1].discord_id]
+    else:
+        leaderboard_ids = [p.discord_id for p in sorted_leaderboard_players]
+        remaining_players = [pid for pid in player_ids if pid not in leaderboard_ids]
+        
+        if sorted_leaderboard_players and remaining_players:
+            captains = [sorted_leaderboard_players[0].discord_id]
+            captains.append(random.choice(remaining_players))
+        else:
+            captains = random.sample(player_ids, 2)
+   
+    lobby_master = random.choice(player_ids)
     
     create_match_db(
         match_id=match_id,
