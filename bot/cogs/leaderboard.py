@@ -182,66 +182,6 @@ class LeaderboardCog(commands.Cog):
             hours = int(diff.total_seconds() / 3600)
             return f"{hours} hour{'s' if hours != 1 else ''} ago"
 
-    @app_commands.command(name="pos")
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
-    async def pos(
-        self,
-        interaction: discord.Interaction
-    ):
-        rank_group = None
-        for role in interaction.user.roles:
-            if role.name in ["iron-plat", "dia-asc", "imm-radiant"]:
-                rank_group = role.name
-                break
-
-        if not rank_group:
-            await interaction.response.send_message("You don't have a valid rank group role!", ephemeral=True)
-            return
-
-        player = get_player_rank(rank_group, str(interaction.user.id))
-        if not player:
-            await interaction.response.send_message("You are not in the leaderboard yet!", ephemeral=True)
-            return
-
-        all_players = get_leaderboard_page(rank_group, 1, 1000)
-        sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
-        
-        position = None
-        for i, p in enumerate(sorted_players, start=1):
-            if p.discord_id == player.discord_id:
-                position = i
-                break
-
-        embed = discord.Embed(
-            title="Your Rank",
-            color=discord.Color.green()
-        )
-        
-        rank_group_display = {
-            "iron-plat": "Iron - Platinum",
-            "dia-asc": "Diamond - Ascendant",
-            "imm-radiant": "Immortal - Radiant"
-        }
-        embed.title = f"Your Rank - {rank_group_display[rank_group]}"
-        
-        streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
-        embed.add_field(
-            name=f"Position: #{position}",
-            value=f"Rank: {player.rank}\nPoints: {player.points}\nWinrate: {player.winrate}%\nMatches: {player.matches_played} | {streak_text}",
-            inline=False
-        )
-        
-        if position > 1:
-            points_to_next = sorted_players[position-2].points - player.points
-            embed.add_field(
-                name="Progress to next position",
-                value=f"Need {points_to_next} more points to reach position #{position-1}",
-                inline=False
-            )
-        
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
     @app_commands.command(name="test_leaderboard")
     @app_commands.default_permissions(administrator=True)
     @app_commands.guilds(discord.Object(id=GUILD_ID))
