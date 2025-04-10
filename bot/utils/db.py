@@ -163,3 +163,14 @@ def get_leaderboard_page(rank_group: str, page: int = 1, page_size: int = 10) ->
 def get_total_pages(rank_group: str, page_size: int = 10) -> int:
     leaderboard = get_leaderboard(rank_group)
     return (len(leaderboard.players) + page_size - 1) // page_size
+
+def get_match_history(limit: Optional[int] = 10) -> List[Match]:
+    query = {"ended_at": {"$exists": True}}
+    sort = [("ended_at", 1)]
+    
+    if limit is not None:
+        matches = db.matches.find(query, sort=sort, limit=limit)
+    else:
+        matches = db.matches.find(query, sort=sort)
+        
+    return [Match(**match) for match in matches]
