@@ -414,6 +414,17 @@ class ScoreSubmissionView(discord.ui.View):
 
         update_leaderboard(rank_group, updated_entries)
 
+        stats_cog = interaction.client.get_cog("StatsCog")
+        if stats_cog:
+            for channel_id in stats_cog.stats_channels:
+                channel = interaction.client.get_channel(channel_id)
+                if channel:
+                    await stats_cog.update_player_stats(channel, all_match_players)
+
+        history_cog = interaction.client.get_cog("HistoryCog")
+        if history_cog:
+            await history_cog.add_match_to_history(match)
+
         leaderboard_cog = interaction.client.get_cog("LeaderboardCog")
         if leaderboard_cog:
             await leaderboard_cog.update_leaderboard()

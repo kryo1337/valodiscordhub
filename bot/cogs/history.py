@@ -220,5 +220,57 @@ class HistoryCog(commands.Cog):
 
         await ctx.send(embed=embed)
 
+    async def add_match_to_history(self, match: Match):
+        for channel_id in self.history_channels:
+            channel = self.bot.get_channel(channel_id)
+            if not channel:
+                continue
+
+            red_team = [f"<@{id}>" for id in match.players_red]
+            blue_team = [f"<@{id}>" for id in match.players_blue]
+            
+            red_team[0] = f"{red_team[0]} 👑"
+            blue_team[0] = f"{blue_team[0]} 👑"
+            
+            red_team_str = f"**{', '.join(red_team)}**" if match.result == "red" else f"{', '.join(red_team)}"
+            blue_team_str = f"**{', '.join(blue_team)}**" if match.result == "blue" else f"{', '.join(blue_team)}"
+            
+            duration = match.duration
+            if duration:
+                hours, remainder = divmod(duration.seconds, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                duration_str = f"{hours}h {minutes}m {seconds}s"
+            else:
+                duration_str = "N/A"
+            
+            embed = discord.Embed(
+                title=f"Match {match.match_id}",
+                color=discord.Color.blue(),
+                timestamp=match.created_at
+            )
+            
+            embed.add_field(
+                name="Teams",
+                value=(
+                    f"🔴 {red_team_str}\n"
+                    f"🔵 {blue_team_str}"
+                ),
+                inline=False
+            )
+            
+            embed.add_field(
+                name="Result",
+                value=f"Score: {match.red_score}-{match.blue_score}",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Duration",
+                value=duration_str,
+                inline=True
+            )
+
+            await channel.send(embed=embed)
+
 async def setup(bot):
     await bot.add_cog(HistoryCog(bot)) 

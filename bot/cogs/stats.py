@@ -5,6 +5,7 @@ from utils.db import get_player_rank, get_leaderboard_page
 import os
 from dotenv import load_dotenv
 from datetime import datetime, timezone
+from typing import List
 
 load_dotenv()
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
@@ -217,6 +218,94 @@ class StatsCog(commands.Cog):
             )
         
         await interaction.followup.send(embed=embed)
+
+    async def update_player_stats(self, channel: discord.TextChannel, player_ids: List[str]):
+        guild = channel.guild
+        all_players = []
+        
+        for rank_group in ["iron-plat", "dia-asc", "imm-radiant"]:
+            players = get_leaderboard_page(rank_group, 1, 1000)
+            all_players.extend(players)
+
+        sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
+        
+        messages = []
+        async for msg in channel.history(limit=200):
+            messages.append(msg)
+            
+        player_messages = {}
+        
+        for msg in messages:
+            if not msg.embeds:
+                continue
+            embed = msg.embeds[0]
+            if not embed.title or not embed.title.startswith("Player Statistics - "):
+                continue
+            player_name = embed.title.replace("Player Statistics - ", "")
+            player_messages[player_name] = msg
+        
+        for player in sorted_players:
+            if player.discord_id not in player_ids:
+                continue
+                
+            try:
+                discord_user = await guild.fetch_member(int(player.discord_id))
+                if not discord_user:
+                    continue
+
+                rank_group = None
+                for role in discord_user.roles:
+                    if role.name in ["iron-plat", "dia-asc", "imm-radiant"]:
+                        rank_group = role.name
+                        break
+
+                if not rank_group:
+                    continue
+
+                position = None
+                for i, p in enumerate(sorted_players, start=1):
+                    if p.discord_id == player.discord_id:
+                        position = i
+                        break
+
+                embed = discord.Embed(
+                    title=f"Player Statistics - {discord_user.display_name}",
+                    color=discord.Color.blue()
+                )
+                
+                rank_group_display = {
+                    "iron-plat": "Iron - Platinum",
+                    "dia-asc": "Diamond - Ascendant",
+                    "imm-radiant": "Immortal - Radiant"
+                }
+                
+                streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
+                embed.add_field(
+                    name="Rank Information",
+                    value=f"Rank: {player.rank}\nRank Group: {rank_group_display[rank_group]}\nPosition: #{position}",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="Statistics",
+                    value=f"Points: {player.points}\nMatches: {player.matches_played}\nWins: {int(player.matches_played * player.winrate / 100)}\nLosses: {int(player.matches_played * (100 - player.winrate) / 100)}\nWinrate: {player.winrate}%\n{streak_text}",
+                    inline=False
+                )
+                
+                if position > 1:
+                    points_to_next = sorted_players[position-2].points - player.points
+                    embed.add_field(
+                        name="Progress",
+                        value=f"Need {points_to_next} more points to reach position #{position-1}",
+                        inline=False
+                    )
+                
+                if discord_user.display_name in player_messages:
+                    await player_messages[discord_user.display_name].edit(embed=embed)
+                else:
+                    await channel.send(embed=embed)
+            except Exception as e:
+                print(f"Error updating stats for player {player.discord_id}: {e}")
 
 async def setup(bot):
     await bot.add_cog(StatsCog(bot)) 
