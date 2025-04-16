@@ -550,7 +550,7 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
         else:
             captains = random.sample(player_ids, 2)
    
-    lobby_master = random.choice(player_ids)
+    lobby_master = random.choice(captains)
     
     create_match_db(
         match_id=match_id,
@@ -558,7 +558,8 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
         players_blue=[],
         captain_red=captains[0],
         captain_blue=captains[1],
-        lobby_master=lobby_master
+        lobby_master=lobby_master,
+        rank_group=rank_group
     )
     
     view = TeamSelectionView(match_id, players, captains)

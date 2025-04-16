@@ -82,6 +82,7 @@ class StatsCog(commands.Cog):
 
         sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
         
+        has_players = False
         for player in sorted_players:
             try:
                 discord_user = await guild.fetch_member(int(player.discord_id))
@@ -136,8 +137,17 @@ class StatsCog(commands.Cog):
                     )
                 
                 await channel.send(embed=embed)
+                has_players = True
             except Exception as e:
                 print(f"Error updating stats for player {player.discord_id}: {e}")
+
+        if not has_players:
+            embed = discord.Embed(
+                title="No Stats Yet",
+                description="Players who haven't played any matches will appear here once they start playing!",
+                color=discord.Color.blue()
+            )
+            await channel.send(embed=embed)
 
     @tasks.loop(minutes=5)
     async def update_stats_channels(self):
@@ -173,7 +183,7 @@ class StatsCog(commands.Cog):
 
         player = get_player_rank(rank_group, target_id)
         if not player:
-            await interaction.followup.send(f"{user.mention} is not in the leaderboard yet!", ephemeral=True)
+            await interaction.followup.send(f"{user.mention} hasn't played any matches yet!", ephemeral=True)
             return
 
         all_players = get_leaderboard_page(rank_group, 1, 1000)

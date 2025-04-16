@@ -10,6 +10,7 @@ class Match(BaseModel):
     captain_red: str
     captain_blue: str
     lobby_master: str
+    rank_group: Literal["iron-plat", "dia-asc", "imm-radiant"]
     defense_start: Optional[Literal["red", "blue"]] = None
     red_score: Optional[int] = None
     blue_score: Optional[int] = None

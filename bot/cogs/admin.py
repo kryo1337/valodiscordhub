@@ -146,6 +146,9 @@ class AdminCog(commands.Cog):
                 await interaction.followup.send("Invalid scores! Scores must be between 0 and 13.", ephemeral=True)
                 return
 
+        if result == "cancelled" and match.result and match.result != "cancelled":
+            await self.revert_leaderboard_points(match_id, match.result)
+
         update_match_result(
             match_id=match_id,
             red_score=red_score if result != "cancelled" else None,
@@ -165,6 +168,69 @@ class AdminCog(commands.Cog):
         
         await asyncio.sleep(5)
         await self.cleanup_match_channels(interaction.guild, match_id)
+
+    async def revert_leaderboard_points(self, match_id: str, previous_result: str):
+        match = get_match(match_id)
+        
+        first_player = get_player(match.players_red[0])
+        if not first_player or not first_player.rank:
+            return
+            
+        rank_group = self.get_rank_group(first_player.rank)
+
+        leaderboard = get_leaderboard(rank_group)
+        current_entries = {str(p.discord_id): p for p in leaderboard.players}
+        updated_entries = []
+
+        all_match_players = match.players_red + match.players_blue
+        player_ranks = {}
+        for player_id in all_match_players:
+            player = get_player(player_id)
+            if player and player.rank:
+                player_ranks[player_id] = player.rank
+
+        winning_team = match.players_red if previous_result == "red" else match.players_blue
+        for player_id in winning_team:
+            if player_id in current_entries:
+                entry = current_entries[player_id]
+                entry.points -= 10
+                entry.matches_played -= 1
+                if entry.matches_played > 0:
+                    entry.winrate = (entry.winrate * (entry.matches_played + 1) - 100) / entry.matches_played
+                else:
+                    entry.winrate = 0.0
+                entry.streak = max(0, entry.streak - 1)
+                updated_entries.append(entry)
+
+        losing_team = match.players_blue if previous_result == "red" else match.players_red
+        for player_id in losing_team:
+            if player_id in current_entries:
+                entry = current_entries[player_id]
+                entry.points += 10
+                entry.matches_played -= 1
+                if entry.matches_played > 0:
+                    entry.winrate = (entry.winrate * (entry.matches_played + 1)) / entry.matches_played
+                else:
+                    entry.winrate = 0.0
+                entry.streak = min(0, entry.streak + 1)
+                updated_entries.append(entry)
+
+        update_leaderboard(rank_group, updated_entries)
+
+        stats_cog = self.bot.get_cog("StatsCog")
+        if stats_cog:
+            for channel_id in stats_cog.stats_channels:
+                channel = self.bot.get_channel(channel_id)
+                if channel:
+                    await stats_cog.update_player_stats(channel, all_match_players)
+
+        history_cog = self.bot.get_cog("HistoryCog")
+        if history_cog:
+            await history_cog.remove_match_from_history(match)
+
+        leaderboard_cog = self.bot.get_cog("LeaderboardCog")
+        if leaderboard_cog:
+            await leaderboard_cog.update_leaderboard()
 
     async def cleanup_match_channels(self, guild: discord.Guild, match_id: str):
         try:

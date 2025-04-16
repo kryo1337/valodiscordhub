@@ -63,14 +63,15 @@ def remove_player_from_queue(rank_group: str, discord_id: str) -> Queue:
     return update_queue(rank_group, queue.players)
 
 def create_match(match_id: str, players_red: List[str], players_blue: List[str], 
-                captain_red: str, captain_blue: str, lobby_master: str) -> Match:
+                captain_red: str, captain_blue: str, lobby_master: str, rank_group: str) -> Match:
     match = Match(
         match_id=match_id,
         players_red=players_red,
         players_blue=players_blue,
         captain_red=captain_red,
         captain_blue=captain_blue,
-        lobby_master=lobby_master
+        lobby_master=lobby_master,
+        rank_group=rank_group
     )
     db.matches.insert_one(match.model_dump())
     return match

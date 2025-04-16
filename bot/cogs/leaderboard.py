@@ -182,54 +182,6 @@ class LeaderboardCog(commands.Cog):
             hours = int(diff.total_seconds() / 3600)
             return f"{hours} hour{'s' if hours != 1 else ''} ago"
 
-    @app_commands.command(name="test_leaderboard")
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
-    async def test_leaderboard(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-
-        category = discord.utils.get(interaction.guild.categories, name="valohub")
-        if not category:
-            await interaction.followup.send(
-                "❌ valohub category not found. Run /setup_leaderboard first.", ephemeral=True
-            )
-            return
-
-        channel = discord.utils.get(category.channels, name="leaderboard")
-        if not channel:
-            await interaction.followup.send(
-                "❌ Leaderboard channel not found. Run /setup_leaderboard first.", ephemeral=True
-            )
-            return
-
-        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
-        for rank_group in rank_groups:
-            test_players = []
-            for i in range(15):
-                discord_id = f"test_user_{rank_group}_{i}"
-                points = 1000 - (i * 50)
-                winrate = 60 - (i * 2)
-                matches = 20 + (i * 5)
-                streak = 3 if i < 3 else 0
-                
-                player = LeaderboardEntry(
-                    discord_id=discord_id,
-                    rank=f"Test Rank {i+1}",
-                    points=points,
-                    matches_played=matches,
-                    winrate=winrate,
-                    streak=streak
-                )
-                test_players.append(player)
-
-            leaderboard = Leaderboard(rank_group=rank_group, players=test_players)
-            update_leaderboard(rank_group, test_players)
-
-        await self.update_leaderboard_display(channel)
-        await interaction.followup.send(
-            "✅ Added test data to all leaderboards!", ephemeral=True
-        )
-
 class LeaderboardView(discord.ui.View):
     def __init__(self, cog, channel, rank_group, current_page, total_pages, page_size):
         super().__init__(timeout=None)

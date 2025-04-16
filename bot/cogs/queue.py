@@ -1,7 +1,7 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 from db.models.queue import QueueEntry, Queue
@@ -121,9 +121,53 @@ class QueueCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.bot.add_listener(self.on_ready)
+        self.check_queue_timeout.start()
 
     async def on_ready(self):
         await self.setup_existing_queues()
+
+    @tasks.loop(minutes=5)
+    async def check_queue_timeout(self):
+        current_time = datetime.now()
+        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
+        
+        for rank_group in rank_groups:
+            try:
+                queue = get_queue(rank_group)
+                if not queue:
+                    continue
+
+                players_to_remove = []
+                for player in queue.players:
+                    time_in_queue = current_time - player.joined_at
+                    if time_in_queue > timedelta(hours=2):
+                        players_to_remove.append(player.discord_id)
+
+                if players_to_remove:
+                    for discord_id in players_to_remove:
+                        queue = remove_player_from_queue(rank_group, discord_id)
+                    
+                    guild = self.bot.get_guild(GUILD_ID)
+                    if guild:
+                        category = discord.utils.get(guild.categories, name="valohub")
+                        if category:
+                            channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
+                            if channel:
+                                async for message in channel.history(limit=1):
+                                    await message.edit(
+                                        content=f"**{rank_group.upper()} Queue**\n"
+                                                f"Click the button to join/leave the queue!\n"
+                                                f"Current players in queue: {len(queue.players)}\n"
+                                                f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players]) if queue.players else 'None'}",
+                                        view=QueueView(rank_group),
+                                    )
+                                    break
+            except Exception as e:
+                print(f"Error checking queue timeout for {rank_group}: {str(e)}")
+
+    @check_queue_timeout.before_loop
+    async def before_check_queue_timeout(self):
+        await self.bot.wait_until_ready()
 
     async def setup_existing_queues(self):
         guild = self.bot.get_guild(GUILD_ID)

@@ -94,8 +94,15 @@ class HistoryCog(commands.Cog):
             else:
                 duration_str = "N/A"
             
+            rank_group_display = {
+                "iron-plat": "Iron - Platinum",
+                "dia-asc": "Diamond - Ascendant",
+                "imm-radiant": "Immortal - Radiant"
+            }
+            
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
+                description=f"**Rank Group: {rank_group_display[match.rank_group]}**",
                 color=discord.Color.blue(),
                 timestamp=match.created_at
             )
@@ -146,8 +153,15 @@ class HistoryCog(commands.Cog):
             else:
                 duration_str = "N/A"
             
+            rank_group_display = {
+                "iron-plat": "Iron - Platinum",
+                "dia-asc": "Diamond - Ascendant",
+                "imm-radiant": "Immortal - Radiant"
+            }
+            
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
+                description=f"**Rank Group: {rank_group_display[match.rank_group]}**",
                 color=discord.Color.blue(),
                 timestamp=match.created_at
             )
@@ -206,9 +220,16 @@ class HistoryCog(commands.Cog):
             else:
                 duration_str = "N/A"
             
+            rank_group_display = {
+                "iron-plat": "Iron - Platinum",
+                "dia-asc": "Diamond - Ascendant",
+                "imm-radiant": "Immortal - Radiant"
+            }
+            
             embed.add_field(
                 name=f"Match {match.match_id}",
                 value=(
+                    f"**Rank Group: {rank_group_display[match.rank_group]}**\n"
                     f"🔴 {red_team_str}\n"
                     f"🔵 {blue_team_str}\n"
                     f"Score: {match.red_score}-{match.blue_score}\n"
@@ -243,8 +264,15 @@ class HistoryCog(commands.Cog):
             else:
                 duration_str = "N/A"
             
+            rank_group_display = {
+                "iron-plat": "Iron - Platinum",
+                "dia-asc": "Diamond - Ascendant",
+                "imm-radiant": "Immortal - Radiant"
+            }
+            
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
+                description=f"**Rank Group: {rank_group_display[match.rank_group]}**",
                 color=discord.Color.blue(),
                 timestamp=match.created_at
             )
@@ -271,6 +299,20 @@ class HistoryCog(commands.Cog):
             )
 
             await channel.send(embed=embed)
+
+    async def remove_match_from_history(self, match: Match):
+        for channel_id in self.history_channels:
+            channel = self.bot.get_channel(channel_id)
+            if not channel:
+                continue
+
+            async for message in channel.history(limit=200):
+                if not message.embeds:
+                    continue
+                embed = message.embeds[0]
+                if embed.title and embed.title == f"Match {match.match_id}":
+                    await message.delete()
+                    break
 
 async def setup(bot):
     await bot.add_cog(HistoryCog(bot)) 
