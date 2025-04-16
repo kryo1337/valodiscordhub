@@ -10,6 +10,7 @@ from utils.db import create_match as create_match_db
 from utils.db import get_leaderboard_page, update_leaderboard, get_leaderboard
 from db.models.leaderboard import LeaderboardEntry
 from .leaderboard import LeaderboardCog
+import time
 
 
 class TeamSelectionView(discord.ui.View):
@@ -343,22 +344,148 @@ class ScoreSubmissionView(discord.ui.View):
         self.blue_score: Optional[tuple] = None
         self.red_captain = red_team[0]
         self.blue_captain = blue_team[0]
+        self.score_submission_enabled = False
+        self.timeout_task = None
+        self.start_time = time.time()
+        self.last_submission_time = 0
+        self.message = None
+        self.admin_called = False
 
     @discord.ui.button(label="Submit Red Team Score", style=discord.ButtonStyle.danger)
-    async def submit_red_score(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def submit_red_score(self, interaction: discord.Interaction, button: discord.ui.Button):
+        current_time = time.time()
+        if current_time - self.last_submission_time < 5:
+            await interaction.response.send_message("Please wait 5 seconds between submissions!", ephemeral=True)
+            return
+        self.last_submission_time = current_time
+
+        if not self.score_submission_enabled:
+            elapsed_time = current_time - self.start_time
+            remaining_time = 300 - elapsed_time
+            if remaining_time > 0:
+                minutes = int(remaining_time // 60)
+                seconds = int(remaining_time % 60)
+                await interaction.response.send_message(f"Score submission will be enabled in {minutes}:{seconds:02d}", ephemeral=True)
+                return
+
         if str(interaction.user.id) != self.red_captain:
             await interaction.response.send_message("Only the Red Team captain can submit the score!", ephemeral=True)
             return
+
+        if self.red_score is not None:
+            await interaction.response.send_message("Red Team score has already been submitted!", ephemeral=True)
+            return
+
         modal = ScoreModal("Red Team Score", self, "red")
         await interaction.response.send_modal(modal)
+        button.disabled = True
+        if self.message:
+            await self.message.edit(view=self)
 
     @discord.ui.button(label="Submit Blue Team Score", style=discord.ButtonStyle.primary)
-    async def submit_blue_score(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def submit_blue_score(self, interaction: discord.Interaction, button: discord.ui.Button):
+        current_time = time.time()
+        if current_time - self.last_submission_time < 5:
+            await interaction.response.send_message("Please wait 5 seconds between submissions!", ephemeral=True)
+            return
+        self.last_submission_time = current_time
+
+        if not self.score_submission_enabled:
+            elapsed_time = current_time - self.start_time
+            remaining_time = 300 - elapsed_time
+            if remaining_time > 0:
+                minutes = int(remaining_time // 60)
+                seconds = int(remaining_time % 60)
+                await interaction.response.send_message(f"Score submission will be enabled in {minutes}:{seconds:02d}", ephemeral=True)
+                return
+
         if str(interaction.user.id) != self.blue_captain:
             await interaction.response.send_message("Only the Blue Team captain can submit the score!", ephemeral=True)
             return
+
+        if self.blue_score is not None:
+            await interaction.response.send_message("Blue Team score has already been submitted!", ephemeral=True)
+            return
+
         modal = ScoreModal("Blue Team Score", self, "blue")
         await interaction.response.send_modal(modal)
+        button.disabled = True
+        if self.message:
+            await self.message.edit(view=self)
+
+    @discord.ui.button(label="Call Admin", style=discord.ButtonStyle.danger, emoji="⚠️")
+    async def call_admin(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.admin_called:
+            await interaction.response.send_message("Admin has already been called for this match!", ephemeral=True)
+            return
+
+        admin_cog = interaction.client.get_cog("AdminCog")
+        if not admin_cog or not admin_cog.admin_channel_id:
+            await interaction.response.send_message("Admin channel not set up!", ephemeral=True)
+            return
+
+        admin_channel = interaction.client.get_channel(admin_cog.admin_channel_id)
+        if not admin_channel:
+            await interaction.response.send_message("Admin channel not found!", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="⚠️ Admin Assistance Requested",
+            description=f"Match ID: {self.match_id}",
+            color=discord.Color.red()
+        )
+        embed.add_field(
+            name="Teams",
+            value=(
+                f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])}\n"
+                f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])}"
+            ),
+            inline=False
+        )
+        embed.add_field(
+            name="Scores",
+            value=(
+                f"🔴 Red Team: {f'{self.red_score[0]}-{self.red_score[1]}' if self.red_score else 'Not submitted'}\n"
+                f"🔵 Blue Team: {f'{self.blue_score[0]}-{self.blue_score[1]}' if self.blue_score else 'Not submitted'}"
+            ),
+            inline=False
+        )
+        embed.add_field(
+            name="Requested by",
+            value=f"<@{interaction.user.id}>",
+            inline=False
+        )
+
+        await admin_channel.send(embed=embed)
+        self.admin_called = True
+        
+        if self.message:
+            content = self.message.content + "\n\n⚠️ Admin has been called for this match"
+            button.disabled = True
+            await self.message.edit(content=content, view=self)
+        
+        await interaction.response.send_message("Admin has been notified!", ephemeral=True)
+
+    async def update_message(self, message: discord.Message):
+        self.message = message
+        content = "**Score Submission**\n\n"
+        if not self.score_submission_enabled:
+            content += "Score submission will be enabled in 5 minutes.\n"
+        else:
+            content += "Score submission is now enabled!\n"
+        
+        content += f"🔴 Red Team Captain: <@{self.red_captain}>\n"
+        content += f"🔵 Blue Team Captain: <@{self.blue_captain}>\n\n"
+        
+        if self.red_score:
+            content += f"🔴 Red Team Score: {self.red_score[0]}-{self.red_score[1]}\n"
+        if self.blue_score:
+            content += f"🔵 Blue Team Score: {self.blue_score[0]}-{self.blue_score[1]}\n"
+
+        if self.admin_called:
+            content += "\n\n⚠️ Admin has been called for this match"
+
+        await message.edit(content=content, view=self)
 
     def validate_score(self, score: int) -> bool:
         return 0 <= score <= 13
@@ -438,9 +565,37 @@ class ScoreSubmissionView(discord.ui.View):
                 return
 
             if self.red_score != self.blue_score:
-                admin_role = discord.utils.get(interaction.guild.roles, name="Admin")
+                admin_cog = interaction.client.get_cog("AdminCog")
+                if admin_cog and admin_cog.admin_channel_id:
+                    admin_channel = interaction.client.get_channel(admin_cog.admin_channel_id)
+                    if admin_channel:
+                        embed = discord.Embed(
+                            title="⚠️ Score Discrepancy Detected",
+                            description=f"Match ID: {self.match_id}",
+                            color=discord.Color.red()
+                        )
+                        embed.add_field(
+                            name="Red Team Captain",
+                            value=f"<@{self.red_captain}> submitted: {self.red_score[0]}-{self.red_score[1]}",
+                            inline=False
+                        )
+                        embed.add_field(
+                            name="Blue Team Captain",
+                            value=f"<@{self.blue_captain}> submitted: {self.blue_score[0]}-{self.blue_score[1]}",
+                            inline=False
+                        )
+                        embed.add_field(
+                            name="Teams",
+                            value=(
+                                f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])}\n"
+                                f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])}"
+                            ),
+                            inline=False
+                        )
+                        await admin_channel.send(embed=embed)
+
                 await interaction.channel.send(
-                    f"{admin_role.mention} Score discrepancy detected!\n"
+                    f"⚠️ Score discrepancy detected!\n"
                     f"🔴 Red Team Captain <@{self.red_captain}> submitted: {self.red_score[0]}-{self.red_score[1]}\n"
                     f"🔵 Blue Team Captain <@{self.blue_captain}> submitted: {self.blue_score[0]}-{self.blue_score[1]}\n"
                     f"Please verify the correct score."

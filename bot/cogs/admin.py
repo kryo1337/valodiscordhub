@@ -15,6 +15,24 @@ GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
 class AdminCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.admin_channel_id = None
+        self.bot.add_listener(self.on_ready)
+
+    async def on_ready(self):
+        await self.setup_existing_admin_channel()
+
+    async def setup_existing_admin_channel(self):
+        guild = self.bot.get_guild(GUILD_ID)
+        if not guild:
+            return
+
+        category = discord.utils.get(guild.categories, name="valohub")
+        if not category:
+            return
+
+        channel = discord.utils.get(category.channels, name="admin")
+        if channel:
+            self.admin_channel_id = channel.id
 
     async def match_id_autocomplete(
         self,
@@ -250,6 +268,53 @@ class AdminCog(commands.Cog):
         current: str,
     ) -> list[app_commands.Choice[str]]:
         return await self.match_id_autocomplete(interaction, current)
+
+    @app_commands.command(name="setup_admin")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def setup_admin(
+        self,
+        interaction: discord.Interaction,
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        category = discord.utils.get(interaction.guild.categories, name="valohub")
+        if not category:
+            category = await interaction.guild.create_category("valohub")
+
+        existing_channel = discord.utils.get(category.channels, name="admin")
+        if existing_channel:
+            await existing_channel.delete()
+
+        overwrites = {
+            interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+        }
+
+        try:
+            channel = await category.create_text_channel(
+                name="admin",
+                overwrites=overwrites,
+                topic="Admin reports and notifications"
+            )
+            self.admin_channel_id = channel.id
+            
+            embed = discord.Embed(
+                title="Admin Reports Channel",
+                description="This channel is for admin reports and notifications.",
+                color=discord.Color.blue()
+            )
+            await channel.send(embed=embed)
+            
+            await interaction.followup.send(
+                f"✅ Admin channel created: {channel.mention}",
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Failed to create admin channel: {str(e)}",
+                ephemeral=True
+            )
 
 async def setup(bot):
     await bot.add_cog(AdminCog(bot)) 
