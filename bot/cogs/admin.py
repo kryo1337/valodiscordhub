@@ -316,5 +316,55 @@ class AdminCog(commands.Cog):
                 ephemeral=True
             )
 
+    async def send_admin_report(self, match_id: str, source_channel_id: int, embed: discord.Embed):
+        if not self.admin_channel_id:
+            return None
+            
+        channel = self.bot.get_channel(self.admin_channel_id)
+        if not channel:
+            return None
+            
+        source_channel = self.bot.get_channel(source_channel_id)
+        if source_channel:
+            embed.add_field(
+                name="Match Channel",
+                value=source_channel.mention,
+                inline=False
+            )
+            
+        view = AdminReportView()
+        return await channel.send(embed=embed, view=view)
+
+class AdminReportView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Close Case", style=discord.ButtonStyle.danger, emoji="✅")
+    async def close_case(self, interaction: discord.Interaction, button: discord.ui.Button):
+        confirm_view = ConfirmCloseView(interaction.message)
+        await interaction.response.send_message("Are you sure you want to close this case?", view=confirm_view, ephemeral=True)
+
+class ConfirmCloseView(discord.ui.View):
+    def __init__(self, message: discord.Message):
+        super().__init__(timeout=60)
+        self.message = message
+
+    @discord.ui.button(label="Yes, close case", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.message.delete()
+        await interaction.response.send_message("Case closed!", ephemeral=True)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("Case closure cancelled.", ephemeral=True)
+        self.stop()
+
+    async def on_timeout(self):
+        try:
+            await self.message.channel.send("Case closure timed out.", ephemeral=True)
+        except:
+            pass
+
 async def setup(bot):
     await bot.add_cog(AdminCog(bot)) 

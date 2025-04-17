@@ -77,6 +77,9 @@ class HistoryCog(commands.Cog):
             return
 
         for match in matches:
+            if match.result == "cancelled":
+                continue
+
             red_team = [f"<@{id}>" for id in match.players_red]
             blue_team = [f"<@{id}>" for id in match.players_blue]
             
@@ -103,29 +106,29 @@ class HistoryCog(commands.Cog):
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
                 description=f"**Rank Group: {rank_group_display[match.rank_group]}**",
-                color=discord.Color.blue(),
+                color=discord.Color.dark_theme(),
                 timestamp=match.created_at
             )
             
             embed.add_field(
-                name="Teams",
+                name="🔴 Red Team",
+                value=f"• Captain: <@{match.players_red[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_red[1:]]),
+                inline=True
+            )
+            embed.add_field(
+                name="🔵 Blue Team",
+                value=f"• Captain: <@{match.players_blue[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_blue[1:]]),
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Match Details",
                 value=(
-                    f"🔴 {red_team_str}\n"
-                    f"🔵 {blue_team_str}"
+                    f"**Score:** {match.red_score}-{match.blue_score}\n"
+                    f"**Duration:** {duration_str}\n"
+                    f"**Winner:** {'🔴 Red Team' if match.result == 'red' else '🔵 Blue Team'}"
                 ),
                 inline=False
-            )
-            
-            embed.add_field(
-                name="Result",
-                value=f"Score: {match.red_score}-{match.blue_score}",
-                inline=True
-            )
-            
-            embed.add_field(
-                name="Duration",
-                value=duration_str,
-                inline=True
             )
 
             await channel.send(embed=embed)
@@ -162,29 +165,29 @@ class HistoryCog(commands.Cog):
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
                 description=f"**Rank Group: {rank_group_display[match.rank_group]}**",
-                color=discord.Color.blue(),
+                color=discord.Color.dark_theme(),
                 timestamp=match.created_at
             )
             
             embed.add_field(
-                name="Teams",
+                name="🔴 Red Team",
+                value=f"• Captain: <@{match.players_red[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_red[1:]]),
+                inline=True
+            )
+            embed.add_field(
+                name="🔵 Blue Team",
+                value=f"• Captain: <@{match.players_blue[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_blue[1:]]),
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Match Details",
                 value=(
-                    f"🔴 {red_team_str}\n"
-                    f"🔵 {blue_team_str}"
+                    f"**Score:** {match.red_score}-{match.blue_score}\n"
+                    f"**Duration:** {duration_str}\n"
+                    f"**Winner:** {'🔴 Red Team' if match.result == 'red' else '🔵 Blue Team'}"
                 ),
                 inline=False
-            )
-            
-            embed.add_field(
-                name="Result",
-                value=f"Score: {match.red_score}-{match.blue_score}",
-                inline=True
-            )
-            
-            embed.add_field(
-                name="Duration",
-                value=duration_str,
-                inline=True
             )
 
             await channel.send(embed=embed)
@@ -199,10 +202,13 @@ class HistoryCog(commands.Cog):
 
         embed = discord.Embed(
             title="Match History",
-            color=discord.Color.blue()
+            color=discord.Color.dark_theme()
         )
 
         for match in matches:
+            if match.result == "cancelled":
+                continue
+
             red_team = [f"<@{id}>" for id in match.players_red]
             blue_team = [f"<@{id}>" for id in match.players_blue]
             
@@ -242,6 +248,9 @@ class HistoryCog(commands.Cog):
         await ctx.send(embed=embed)
 
     async def add_match_to_history(self, match: Match):
+        if match.result == "cancelled":
+            return
+
         for channel_id in self.history_channels:
             channel = self.bot.get_channel(channel_id)
             if not channel:
@@ -273,29 +282,29 @@ class HistoryCog(commands.Cog):
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
                 description=f"**Rank Group: {rank_group_display[match.rank_group]}**",
-                color=discord.Color.blue(),
+                color=discord.Color.dark_theme(),
                 timestamp=match.created_at
             )
             
             embed.add_field(
-                name="Teams",
+                name="🔴 Red Team",
+                value=f"• Captain: <@{match.players_red[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_red[1:]]),
+                inline=True
+            )
+            embed.add_field(
+                name="🔵 Blue Team",
+                value=f"• Captain: <@{match.players_blue[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_blue[1:]]),
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Match Details",
                 value=(
-                    f"🔴 {red_team_str}\n"
-                    f"🔵 {blue_team_str}"
+                    f"**Score:** {match.red_score}-{match.blue_score}\n"
+                    f"**Duration:** {duration_str}\n"
+                    f"**Winner:** {'🔴 Red Team' if match.result == 'red' else '🔵 Blue Team'}"
                 ),
                 inline=False
-            )
-            
-            embed.add_field(
-                name="Result",
-                value=f"Score: {match.red_score}-{match.blue_score}",
-                inline=True
-            )
-            
-            embed.add_field(
-                name="Duration",
-                value=duration_str,
-                inline=True
             )
 
             await channel.send(embed=embed)

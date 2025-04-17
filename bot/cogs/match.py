@@ -37,18 +37,44 @@ class TeamSelectionView(discord.ui.View):
             return
 
         current_captain = self.captains[self.current_captain_index]
-        message_content = (
-            f"**Team Selection in Progress**\n\n"
-            f"🔴 Red Team Captain: <@{self.captains[0]}>\n"
-            f"🔵 Blue Team Captain: <@{self.captains[1]}>\n\n"
-            f"Current Captain's Turn: <@{current_captain}>\n"
-            f"Selection: {self.current_selection_index + 1}/{len(self.selection_order)}\n"
-            f"Players Remaining: {remaining_players}\n"
-            f"Time remaining: 15 seconds\n\n"
-            f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])}\n"
-            f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])}\n\n"
-            f"Available Players: {', '.join([f'<@{p.discord_id}>' for p in available_players]) if available_players else 'None'}"
+        
+        embed = discord.Embed(
+            title="Team Selection",
+            color=discord.Color.dark_theme()
         )
+        
+        progress = "▰" * (self.current_selection_index + 1) + "▱" * (len(self.selection_order) - self.current_selection_index - 1)
+        embed.add_field(
+            name="Progress",
+            value=f"`{progress}`\nSelection {self.current_selection_index + 1}/{len(self.selection_order)}",
+            inline=False
+        )
+        
+        embed.add_field(
+            name=f"🔴 Red Team",
+            value=f"• Captain: <@{self.red_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.red_team[1:]]),
+            inline=True
+        )
+        embed.add_field(
+            name=f"🔵 Blue Team",
+            value=f"• Captain: <@{self.blue_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.blue_team[1:]]),
+            inline=True
+        )
+        
+        embed.add_field(
+            name="Current Turn",
+            value=f"<@{current_captain}>",
+            inline=False
+        )
+        
+        if available_players:
+            embed.add_field(
+                name="Available Players",
+                value="\n".join([f"• <@{p.discord_id}>" for p in available_players]),
+                inline=False
+            )
+        
+        embed.set_footer(text=f"⏱️ Time remaining: 15 seconds | Players remaining: {remaining_players}")
 
         view = discord.ui.View()
         if available_players and self.current_selection_index < len(self.selection_order) - 1:
@@ -79,7 +105,7 @@ class TeamSelectionView(discord.ui.View):
             select_menu.callback = select_callback
             view.add_item(select_menu)
 
-        await message.edit(content=message_content, view=view)
+        await message.edit(embed=embed, view=view)
 
         if available_players and self.current_selection_index < len(self.selection_order) - 1:
             await self.start_timeout()
@@ -219,70 +245,102 @@ class SideSelectionView(discord.ui.View):
         self.timeout_task = None
         self.last_message = None
 
+    async def attack_callback(self, interaction: discord.Interaction):
+        if str(interaction.user.id) != self.side_selector_id:
+            await interaction.response.send_message("Only the team captain can select sides!", ephemeral=True)
+            return
+        if self.timeout_task:
+            self.timeout_task.cancel()
+        if str(interaction.user.id) in self.red_team:
+            self.red_side = "attack"
+            self.blue_side = "defense"
+        else:
+            self.blue_side = "attack"
+            self.red_side = "defense"
+        await self.check_sides(interaction)
+        await interaction.response.defer()
+
+    async def defense_callback(self, interaction: discord.Interaction):
+        if str(interaction.user.id) != self.side_selector_id:
+            await interaction.response.send_message("Only the team captain can select sides!", ephemeral=True)
+            return
+        if self.timeout_task:
+            self.timeout_task.cancel()
+        if str(interaction.user.id) in self.red_team:
+            self.red_side = "defense"
+            self.blue_side = "attack"
+        else:
+            self.blue_side = "defense"
+            self.red_side = "attack"
+        await self.check_sides(interaction)
+        await interaction.response.defer()
+
     async def update_message(self, message: discord.Message):
         self.last_message = message
         side_selector_team = "Red" if self.side_selector_id in self.red_team else "Blue"
-
         match = get_match(self.match_id)
-
-        message_content = (
-            f"**Team Selection Complete!**\n\n"
-            f"**Captains:**\n"
-            f"🔴 Red Team Captain: <@{self.red_team[0]}>\n"
-            f"🔵 Blue Team Captain: <@{self.blue_team[0]}>\n"
-            f"**Teams:**\n"
-            f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])}\n"
-            f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])}\n\n"
-            f"**Voice Channels:**\n"
-            f"🔴 Red Team: {self.red_vc.mention}\n"
-            f"🔵 Blue Team: {self.blue_vc.mention}\n\n"
-            f"🎮 Lobby Master: <@{match.lobby_master}>\n\n"
-            f"**Side Selection:**\n"
-            f"{side_selector_team} Team Captain (<@{self.side_selector_id}>), please select your side:\n"
-            f"Time remaining: 30 seconds"
+        
+        embed = discord.Embed(
+            title="Side Selection",
+            color=discord.Color.dark_theme()
         )
+
+        red_status = f" ({self.red_side.title()})" if self.red_side else ""
+        blue_status = f" ({self.blue_side.title()})" if self.blue_side else ""
+        
+        embed.add_field(
+            name=f"🔴 Red Team{red_status}",
+            value=f"• Captain: <@{self.red_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.red_team[1:]]) + red_status,
+            inline=True
+        )
+        embed.add_field(
+            name=f"🔵 Blue Team{blue_status}",
+            value=f"• Captain: <@{self.blue_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.blue_team[1:]]) + blue_status,
+            inline=True
+        )
+        
+        embed.add_field(
+            name="Voice Channels",
+            value=f"🔴 {self.red_vc.mention}\n🔵 {self.blue_vc.mention}",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🎮 Lobby Master",
+            value=f"<@{match.lobby_master}>",
+            inline=False
+        )
+        
+
+        if not self.red_side and not self.blue_side:
+            embed.add_field(
+                name="Side Selection",
+                value=f"{side_selector_team} Team Captain (<@{self.side_selector_id}>), please select your side:",
+                inline=False
+            )
+            embed.set_footer(text="Time remaining: 30 seconds")
 
         view = discord.ui.View()
         
-        attack_button = discord.ui.Button(label="Attack", style=discord.ButtonStyle.primary)
-        defense_button = discord.ui.Button(label="Defense", style=discord.ButtonStyle.secondary)
+        if not self.red_side and not self.blue_side:
+            attack_button = discord.ui.Button(
+                label="Attack",
+                style=discord.ButtonStyle.success,
+                emoji="⚔️"
+            )
+            defense_button = discord.ui.Button(
+                label="Defense",
+                style=discord.ButtonStyle.danger,
+                emoji="🛡️"
+            )
 
-        async def attack_callback(interaction: discord.Interaction):
-            if str(interaction.user.id) != self.side_selector_id:
-                await interaction.response.send_message("Only the team captain can select sides!", ephemeral=True)
-                return
-            if self.timeout_task:
-                self.timeout_task.cancel()
-            if str(interaction.user.id) in self.red_team:
-                self.red_side = "attack"
-                self.blue_side = "defense"
-            else:
-                self.blue_side = "attack"
-                self.red_side = "defense"
-            await self.check_sides(interaction)
-            await interaction.response.defer()
+            attack_button.callback = self.attack_callback
+            defense_button.callback = self.defense_callback
+            
+            view.add_item(attack_button)
+            view.add_item(defense_button)
 
-        async def defense_callback(interaction: discord.Interaction):
-            if str(interaction.user.id) != self.side_selector_id:
-                await interaction.response.send_message("Only the team captain can select sides!", ephemeral=True)
-                return
-            if self.timeout_task:
-                self.timeout_task.cancel()
-            if str(interaction.user.id) in self.red_team:
-                self.red_side = "defense"
-                self.blue_side = "attack"
-            else:
-                self.blue_side = "defense"
-                self.red_side = "attack"
-            await self.check_sides(interaction)
-            await interaction.response.defer()
-
-        attack_button.callback = attack_callback
-        defense_button.callback = defense_callback
-        view.add_item(attack_button)
-        view.add_item(defense_button)
-
-        await message.edit(content=message_content, view=view)
+        await message.edit(embed=embed, view=view)
 
         await self.start_timeout()
 
@@ -313,26 +371,44 @@ class SideSelectionView(discord.ui.View):
             match = get_match(self.match_id)
 
             score_view = ScoreSubmissionView(self.match_id, self.red_team, self.blue_team)
-            message_content = (
-                f"**Match Setup Complete!**\n\n"
-                f"**Captains:**\n"
-                f"🔴 Red Team Captain: <@{self.red_team[0]}>\n"
-                f"🔵 Blue Team Captain: <@{self.blue_team[0]}>\n\n"
-                f"**Teams:**\n"
-                f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])} ({self.red_side.title()})\n"
-                f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])} ({self.blue_side.title()})\n\n"
-                f"**Voice Channels:**\n"
-                f"🔴 Red Team: {self.red_vc.mention}\n"
-                f"🔵 Blue Team: {self.blue_vc.mention}\n\n"
-                f"🎮 Lobby Master: <@{match.lobby_master}>\n\n"
-                f"**Score Submission:**\n"
-                f"Captains, please submit the match score:"
+            embed = discord.Embed(
+                title="Score Submission",
+                color=discord.Color.dark_theme()
+            )
+
+            embed.add_field(
+                name="🔴 Red Team",
+                value=f"• Captain: <@{self.red_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.red_team[1:]]) + f"\n({self.red_side.title()})",
+                inline=True
+            )
+            embed.add_field(
+                name="🔵 Blue Team",
+                value=f"• Captain: <@{self.blue_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.blue_team[1:]]) + f"\n({self.blue_side.title()})",
+                inline=True
+            )
+
+            embed.add_field(
+                name="Voice Channels",
+                value=f"🔴 {self.red_vc.mention}\n🔵 {self.blue_vc.mention}",
+                inline=False
+            )
+
+            embed.add_field(
+                name="🎮 Lobby Master",
+                value=f"<@{match.lobby_master}>",
+                inline=False
+            )
+
+            embed.add_field(
+                name="Score Submission",
+                value="Captains, please submit the match score:",
+                inline=False
             )
 
             if isinstance(interaction, discord.Message):
-                await interaction.edit(content=message_content, view=score_view)
+                await interaction.edit(embed=embed, view=score_view)
             else:
-                await interaction.message.edit(content=message_content, view=score_view)
+                await interaction.message.edit(embed=embed, view=score_view)
 
 class ScoreSubmissionView(discord.ui.View):
     def __init__(self, match_id: str, red_team: List[str], blue_team: List[str]):
@@ -424,11 +500,6 @@ class ScoreSubmissionView(discord.ui.View):
             await interaction.response.send_message("Admin channel not set up!", ephemeral=True)
             return
 
-        admin_channel = interaction.client.get_channel(admin_cog.admin_channel_id)
-        if not admin_channel:
-            await interaction.response.send_message("Admin channel not found!", ephemeral=True)
-            return
-
         embed = discord.Embed(
             title="⚠️ Admin Assistance Requested",
             description=f"Match ID: {self.match_id}",
@@ -456,36 +527,99 @@ class ScoreSubmissionView(discord.ui.View):
             inline=False
         )
 
-        await admin_channel.send(embed=embed)
-        self.admin_called = True
-        
-        if self.message:
-            content = self.message.content + "\n\n⚠️ Admin has been called for this match"
-            button.disabled = True
-            await self.message.edit(content=content, view=self)
-        
-        await interaction.response.send_message("Admin has been notified!", ephemeral=True)
+        message = await admin_cog.send_admin_report(self.match_id, interaction.channel_id, embed)
+        if message:
+            self.admin_called = True
+            if self.message:
+                content = self.message.content + "\n\n⚠️ Admin has been called for this match"
+                button.disabled = True
+                await self.message.edit(content=content, view=self)
+            await interaction.response.send_message("Admin has been notified!", ephemeral=True)
+        else:
+            await interaction.response.send_message("Failed to send admin report!", ephemeral=True)
 
     async def update_message(self, message: discord.Message):
         self.message = message
-        content = "**Score Submission**\n\n"
+        
+        embed = discord.Embed(
+            title="Score Submission",
+            description="Captains, please submit the match score:",
+            color=discord.Color.dark_theme()
+        )
+        
+        red_score_text = f"{self.red_score[0]}-{self.red_score[1]}" if self.red_score else "Not submitted"
+        blue_score_text = f"{self.blue_score[0]}-{self.blue_score[1]}" if self.blue_score else "Not submitted"
+        
+        embed.add_field(
+            name="🔴 Red Team",
+            value=f"• <@{self.red_captain}>\n• Score: {red_score_text}",
+            inline=True
+        )
+        embed.add_field(
+            name="🔵 Blue Team",
+            value=f"• <@{self.blue_captain}>\n• Score: {blue_score_text}",
+            inline=True
+        )
+        
         if not self.score_submission_enabled:
-            content += "Score submission will be enabled in 5 minutes.\n"
+            elapsed_time = time.time() - self.start_time
+            remaining_time = 300 - elapsed_time
+            minutes = int(remaining_time // 60)
+            seconds = int(remaining_time % 60)
+            
+
+            progress = int((remaining_time / 300) * 10)
+            progress_bar = "▰" * progress + "▱" * (10 - progress)
+            
+            embed.add_field(
+                name="Score Submission Cooldown",
+                value=f"`{progress_bar}` {minutes}:{seconds:02d}",
+                inline=False
+            )
         else:
-            content += "Score submission is now enabled!\n"
-        
-        content += f"🔴 Red Team Captain: <@{self.red_captain}>\n"
-        content += f"🔵 Blue Team Captain: <@{self.blue_captain}>\n\n"
-        
-        if self.red_score:
-            content += f"🔴 Red Team Score: {self.red_score[0]}-{self.red_score[1]}\n"
-        if self.blue_score:
-            content += f"🔵 Blue Team Score: {self.blue_score[0]}-{self.blue_score[1]}\n"
+            embed.add_field(
+                name="Status",
+                value="✅ Score submission is now enabled!",
+                inline=False
+            )
 
         if self.admin_called:
-            content += "\n\n⚠️ Admin has been called for this match"
+            embed.add_field(
+                name="⚠️ Admin Status",
+                value="An admin has been called to review this match",
+                inline=False
+            )
 
-        await message.edit(content=content, view=self)
+        view = discord.ui.View()
+        
+        red_button = discord.ui.Button(
+            label="Submit Red Team Score",
+            style=discord.ButtonStyle.danger,
+            emoji="🔴",
+            disabled=self.red_score is not None or not self.score_submission_enabled
+        )
+        blue_button = discord.ui.Button(
+            label="Submit Blue Team Score",
+            style=discord.ButtonStyle.primary,
+            emoji="🔵",
+            disabled=self.blue_score is not None or not self.score_submission_enabled
+        )
+        admin_button = discord.ui.Button(
+            label="Call Admin",
+            style=discord.ButtonStyle.danger,
+            emoji="⚠️",
+            disabled=self.admin_called
+        )
+        
+        red_button.callback = self.submit_red_score
+        blue_button.callback = self.submit_blue_score
+        admin_button.callback = self.call_admin
+        
+        view.add_item(red_button)
+        view.add_item(blue_button)
+        view.add_item(admin_button)
+        
+        await message.edit(embed=embed, view=view)
 
     def validate_score(self, score: int) -> bool:
         return 0 <= score <= 13
@@ -558,8 +692,14 @@ class ScoreSubmissionView(discord.ui.View):
 
     async def check_scores(self, interaction: discord.Interaction):
         if self.red_score is not None and self.blue_score is not None:
-            if not self.validate_score(self.red_score) or not self.validate_score(self.blue_score):
-                await interaction.channel.send("Invalid scores submitted! Scores must be between 0 and 13.")
+            if not self.validate_score(self.red_score[0]) or not self.validate_score(self.red_score[1]) or \
+               not self.validate_score(self.blue_score[0]) or not self.validate_score(self.blue_score[1]):
+                embed = discord.Embed(
+                    title="Invalid Score",
+                    description="Scores must be between 0 and 13.",
+                    color=discord.Color.red()
+                )
+                await interaction.channel.send(embed=embed)
                 self.red_score = None
                 self.blue_score = None
                 return
@@ -586,20 +726,21 @@ class ScoreSubmissionView(discord.ui.View):
                         )
                         embed.add_field(
                             name="Teams",
-                            value=(
-                                f"🔴 Red Team: {', '.join([f'<@{id}>' for id in self.red_team])}\n"
-                                f"🔵 Blue Team: {', '.join([f'<@{id}>' for id in self.blue_team])}"
-                            ),
+                            value=f"🔴 Red: {', '.join([f'<@{id}>' for id in self.red_team])}\n🔵 Blue: {', '.join([f'<@{id}>' for id in self.blue_team])}",
                             inline=False
                         )
                         await admin_channel.send(embed=embed)
 
-                await interaction.channel.send(
-                    f"⚠️ Score discrepancy detected!\n"
-                    f"🔴 Red Team Captain <@{self.red_captain}> submitted: {self.red_score[0]}-{self.red_score[1]}\n"
-                    f"🔵 Blue Team Captain <@{self.blue_captain}> submitted: {self.blue_score[0]}-{self.blue_score[1]}\n"
-                    f"Please verify the correct score."
+                embed = discord.Embed(
+                    title="⚠️ Score Discrepancy",
+                    color=discord.Color.gold(),
+                    description=(
+                        f"🔴 Red Team Captain <@{self.red_captain}> submitted: {self.red_score[0]}-{self.red_score[1]}\n"
+                        f"🔵 Blue Team Captain <@{self.blue_captain}> submitted: {self.blue_score[0]}-{self.blue_score[1]}\n\n"
+                        "Please verify the correct score."
+                    )
                 )
+                await interaction.channel.send(embed=embed)
             else:
                 red_score, blue_score = self.red_score
                 winner = "red" if red_score > blue_score else "blue"
@@ -613,13 +754,17 @@ class ScoreSubmissionView(discord.ui.View):
 
                 await self.update_leaderboard_points(interaction, winner)
 
-                await interaction.channel.send(
-                    f"**Match Complete!**\n"
-                    f"Scores verified by both captains:\n"
-                    f"🔴 Red Team: {red_score}\n"
-                    f"🔵 Blue Team: {blue_score}\n"
-                    f"**{winner.title()} Team Wins!**"
+                embed = discord.Embed(
+                    title="Match Complete!",
+                    color=discord.Color.green(),
+                    description=(
+                        "**Final Score**\n"
+                        f"🔴 Red Team: {red_score}\n"
+                        f"🔵 Blue Team: {blue_score}\n\n"
+                        f"**{winner.upper()} TEAM WINS!**"
+                    )
                 )
+                await interaction.channel.send(embed=embed)
                 
                 await asyncio.sleep(10)
                 await self.cleanup_match_channels(interaction.guild)
@@ -644,11 +789,15 @@ class ScoreModal(discord.ui.Modal):
             label="Your team's score",
             placeholder="Enter your team's rounds won (0-13)",
             required=True,
+            min_length=1,
+            max_length=2
         )
         self.opponent_score = discord.ui.TextInput(
             label="Opponent's score",
             placeholder="Enter opponent's rounds won (0-13)",
             required=True,
+            min_length=1,
+            max_length=2
         )
         self.add_item(self.team_score)
         self.add_item(self.opponent_score)
@@ -659,7 +808,12 @@ class ScoreModal(discord.ui.Modal):
             opponent_score = int(self.opponent_score.value)
             
             if not self.view.validate_score(team_score) or not self.view.validate_score(opponent_score):
-                await interaction.response.send_message("Invalid scores! Scores must be between 0 and 13.", ephemeral=True)
+                embed = discord.Embed(
+                    title="Invalid Score",
+                    description="Scores must be between 0 and 13.",
+                    color=discord.Color.red()
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
 
             if self.team == "red":
@@ -668,9 +822,20 @@ class ScoreModal(discord.ui.Modal):
                 self.view.blue_score = (team_score, opponent_score)
 
             await self.view.check_scores(interaction)
-            await interaction.response.send_message("Score submitted!", ephemeral=True)
+            
+            embed = discord.Embed(
+                title="Score Submitted",
+                description=f"Your score ({team_score}-{opponent_score}) has been recorded.",
+                color=discord.Color.green()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
         except ValueError:
-            await interaction.response.send_message("Please enter valid numbers!", ephemeral=True)
+            embed = discord.Embed(
+                title="Invalid Input",
+                description="Please enter valid numbers!",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
 async def create_match(guild: discord.Guild, rank_group: str, players: List[QueueEntry]):
     match_id = f"match_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -719,16 +884,30 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
     
     view = TeamSelectionView(match_id, players, captains)
     
-    initial_message = await match_channel.send(
-        f"**New Match Created!**\n"
-        f"Players: {', '.join([f'<@{p.discord_id}>' for p in players])}\n\n"
-        f"Captains:\n"
-        f"🔴 Red Team Captain: <@{captains[0]}>\n"
-        f"🔵 Blue Team Captain: <@{captains[1]}>\n\n"
-        f"Voice Channel: {match_vc.mention}\n"
-        f"Team selection will begin now!",
-        view=view,
+    embed = discord.Embed(
+        title="Match Setup Complete!",
+        color=discord.Color.dark_theme()
     )
+
+    embed.add_field(
+        name="Captains",
+        value=f"🔴 Red Team Captain: <@{captains[0]}>\n🔵 Blue Team Captain: <@{captains[1]}>",
+        inline=False
+    )
+
+    embed.add_field(
+        name="Players",
+        value="\n".join([f"• <@{p.discord_id}>" for p in players]),
+        inline=False
+    )
+
+    embed.add_field(
+        name="Voice Channel",
+        value=f"🎤 {match_vc.mention}",
+        inline=False
+    )
+
+    initial_message = await match_channel.send(embed=embed, view=view)
 
     await asyncio.sleep(10)
     await view.update_selection_message(initial_message)

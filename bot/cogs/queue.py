@@ -25,7 +25,9 @@ class QueueView(discord.ui.View):
         self.last_interaction = {}
 
     @discord.ui.button(
-        label="Queue", style=discord.ButtonStyle.grey, custom_id="join_button"
+        label="Queue",
+        style=discord.ButtonStyle.grey,
+        custom_id="join_button",
     )
     async def join_button(
         self, interaction: discord.Interaction, button: discord.ui.Button
@@ -103,13 +105,37 @@ class QueueView(discord.ui.View):
         try:
             channel = interaction.channel
             async for message in channel.history(limit=1):
-                await message.edit(
-                    content=f"**{self.rank_group.upper()} Queue**\n"
-                            f"Click the button to join/leave the queue!\n"
-                            f"Current players in queue: {len(queue.players)}\n"
-                            f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players]) if queue.players else 'None'}",
-                    view=self,
+                embed = discord.Embed(
+                    title=f"{self.rank_group.upper()} Queue",
+                    color=discord.Color.dark_theme()
                 )
+                
+                # Progress bar for queue
+                progress = min(len(queue.players) * 10, 100)
+                progress_bar = "▰" * (progress // 10) + "▱" * ((100 - progress) // 10)
+                embed.add_field(
+                    name="Queue Status",
+                    value=f"`{progress_bar}` {len(queue.players)}/10",
+                    inline=False
+                )
+                
+                if queue.players:
+                    players_list = "\n".join([f"• <@{p.discord_id}>" for p in queue.players])
+                    embed.add_field(
+                        name="Players",
+                        value=players_list,
+                        inline=False
+                    )
+                else:
+                    embed.add_field(
+                        name="Players",
+                        value="Queue is empty",
+                        inline=False
+                    )
+                
+                embed.set_footer(text="Click the button below to join/leave the queue")
+                
+                await message.edit(embed=embed, view=self)
                 break
         except Exception as e:
             await interaction.channel.send(f"Error updating queue message: {str(e)}")
@@ -154,13 +180,36 @@ class QueueCog(commands.Cog):
                             channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
                             if channel:
                                 async for message in channel.history(limit=1):
-                                    await message.edit(
-                                        content=f"**{rank_group.upper()} Queue**\n"
-                                                f"Click the button to join/leave the queue!\n"
-                                                f"Current players in queue: {len(queue.players)}\n"
-                                                f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players]) if queue.players else 'None'}",
-                                        view=QueueView(rank_group),
+                                    embed = discord.Embed(
+                                        title=f"{rank_group.upper()} Queue",
+                                        color=discord.Color.dark_theme()
                                     )
+                                    
+                                    progress = min(len(queue.players) * 10, 100)
+                                    progress_bar = "▰" * (progress // 10) + "▱" * ((100 - progress) // 10)
+                                    embed.add_field(
+                                        name="Queue Status",
+                                        value=f"`{progress_bar}` {len(queue.players)}/10",
+                                        inline=False
+                                    )
+                                    
+                                    if queue.players:
+                                        players_list = "\n".join([f"• <@{p.discord_id}>" for p in queue.players])
+                                        embed.add_field(
+                                            name="Players",
+                                            value=players_list,
+                                            inline=False
+                                        )
+                                    else:
+                                        embed.add_field(
+                                            name="Players",
+                                            value="Queue is empty",
+                                            inline=False
+                                        )
+                                    
+                                    embed.set_footer(text="Click the button below to join/leave the queue")
+                                    
+                                    await message.edit(embed=embed, view=QueueView(rank_group))
                                     break
             except Exception as e:
                 print(f"Error checking queue timeout for {rank_group}: {str(e)}")
@@ -190,13 +239,38 @@ class QueueCog(commands.Cog):
                 
                 queue = get_queue(rank_group) or Queue(rank_group=rank_group, players=[])
                 view = QueueView(rank_group)
-                await channel.send(
-                    content=f"**{rank_group.upper()} Queue**\n"
-                            f"Click the button to join/leave the queue!\n"
-                            f"Current players in queue: {len(queue.players)}\n"
-                            f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players]) if queue.players else 'None'}",
-                    view=view,
+                
+                embed = discord.Embed(
+                    title=f"{rank_group.upper()} Queue",
+                    color=discord.Color.dark_theme()
                 )
+                
+                # Progress bar for queue
+                progress = min(len(queue.players) * 10, 100)
+                progress_bar = "▰" * (progress // 10) + "▱" * ((100 - progress) // 10)
+                embed.add_field(
+                    name="Queue Status",
+                    value=f"`{progress_bar}` {len(queue.players)}/10",
+                    inline=False
+                )
+                
+                if queue.players:
+                    players_list = "\n".join([f"• <@{p.discord_id}>" for p in queue.players])
+                    embed.add_field(
+                        name="Players",
+                        value=players_list,
+                        inline=False
+                    )
+                else:
+                    embed.add_field(
+                        name="Players",
+                        value="Queue is empty",
+                        inline=False
+                    )
+                
+                embed.set_footer(text="Click the button below to join/leave the queue")
+                
+                await channel.send(embed=embed, view=view)
 
     @app_commands.command(name="test_queue")
     @app_commands.default_permissions(administrator=True)
@@ -241,13 +315,30 @@ class QueueCog(commands.Cog):
         update_queue("imm-radiant", queue.players)
 
         async for message in channel.history(limit=1):
-            await message.edit(
-                content=f"**IMMORTAL-RADIANT Queue**\n"
-                        f"Click the button to join/leave the queue!\n"
-                        f"Current players in queue: {len(queue.players)}\n"
-                        f"Players: {', '.join(f'<@{p.discord_id}>' for p in queue.players)}",
-                view=QueueView("imm-radiant"),
+            embed = discord.Embed(
+                title="IMMORTAL-RADIANT Queue",
+                color=discord.Color.dark_theme()
             )
+            
+            progress = min(len(queue.players) * 10, 100)
+            progress_bar = "▰" * (progress // 10) + "▱" * ((100 - progress) // 10)
+            embed.add_field(
+                name="Queue Status",
+                value=f"`{progress_bar}` {len(queue.players)}/10",
+                inline=False
+            )
+            
+            if queue.players:
+                players_list = "\n".join([f"• <@{p.discord_id}>" for p in queue.players])
+                embed.add_field(
+                    name="Players",
+                    value=players_list,
+                    inline=False
+                )
+            
+            embed.set_footer(text="Click the button below to join/leave the queue")
+            
+            await message.edit(embed=embed, view=QueueView("imm-radiant"))
             break
 
         await interaction.followup.send(
