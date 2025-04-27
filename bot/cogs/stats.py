@@ -106,7 +106,7 @@ class StatsCog(commands.Cog):
 
                 embed = discord.Embed(
                     title=f"Player Statistics - {discord_user.display_name}",
-                    color=discord.Color.blue()
+                    color=discord.Color.dark_theme()
                 )
                 
                 rank_group_display = {
@@ -117,21 +117,32 @@ class StatsCog(commands.Cog):
                 
                 streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
                 embed.add_field(
-                    name="Rank Information",
-                    value=f"Rank: {player.rank}\nRank Group: {rank_group_display[rank_group]}\nPosition: #{position}",
+                    name="🎮 Rank Information",
+                    value=(
+                        f"• Rank: {player.rank}\n"
+                        f"• Group: {rank_group_display[rank_group]}\n"
+                        f"• Position: #{position}"
+                    ),
                     inline=False
                 )
                 
                 embed.add_field(
-                    name="Statistics",
-                    value=f"Points: {player.points}\nMatches: {player.matches_played}\nWins: {int(player.matches_played * player.winrate / 100)}\nLosses: {int(player.matches_played * (100 - player.winrate) / 100)}\nWinrate: {player.winrate}%\n{streak_text}",
+                    name="📊 Statistics",
+                    value=(
+                        f"• Points: {player.points}\n"
+                        f"• Matches: {player.matches_played}\n"
+                        f"• Wins: {int(player.matches_played * player.winrate / 100)}\n"
+                        f"• Losses: {int(player.matches_played * (100 - player.winrate) / 100)}\n"
+                        f"• Winrate: {player.winrate}%\n"
+                        f"{streak_text}"
+                    ),
                     inline=False
                 )
                 
                 if position > 1:
                     points_to_next = sorted_players[position-2].points - player.points
                     embed.add_field(
-                        name="Progress",
+                        name="📈 Progress",
                         value=f"Need {points_to_next} more points to reach position #{position-1}",
                         inline=False
                     )
@@ -145,7 +156,7 @@ class StatsCog(commands.Cog):
             embed = discord.Embed(
                 title="No Stats Yet",
                 description="Players who haven't played any matches will appear here once they start playing!",
-                color=discord.Color.blue()
+                color=discord.Color.dark_theme()
             )
             await channel.send(embed=embed)
 
@@ -197,7 +208,7 @@ class StatsCog(commands.Cog):
 
         embed = discord.Embed(
             title=f"Player Statistics - {user.display_name}",
-            color=discord.Color.blue()
+            color=discord.Color.dark_theme()
         )
         
         rank_group_display = {
@@ -208,21 +219,32 @@ class StatsCog(commands.Cog):
         
         streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
         embed.add_field(
-            name="Rank Information",
-            value=f"Rank: {player.rank}\nRank Group: {rank_group_display[rank_group]}\nPosition: #{position}",
+            name="🎮 Rank Information",
+            value=(
+                f"• Rank: {player.rank}\n"
+                f"• Group: {rank_group_display[rank_group]}\n"
+                f"• Position: #{position}"
+            ),
             inline=False
         )
         
         embed.add_field(
-            name="Statistics",
-            value=f"Points: {player.points}\nMatches: {player.matches_played}\nWins: {int(player.matches_played * player.winrate / 100)}\nLosses: {int(player.matches_played * (100 - player.winrate) / 100)}\nWinrate: {player.winrate}%\n{streak_text}",
+            name="📊 Statistics",
+            value=(
+                f"• Points: {player.points}\n"
+                f"• Matches: {player.matches_played}\n"
+                f"• Wins: {int(player.matches_played * player.winrate / 100)}\n"
+                f"• Losses: {int(player.matches_played * (100 - player.winrate) / 100)}\n"
+                f"• Winrate: {player.winrate}%\n"
+                f"{streak_text}"
+            ),
             inline=False
         )
         
         if position > 1:
             points_to_next = sorted_players[position-2].points - player.points
             embed.add_field(
-                name="Progress",
+                name="📈 Progress",
                 value=f"Need {points_to_next} more points to reach position #{position-1}",
                 inline=False
             )
@@ -280,7 +302,7 @@ class StatsCog(commands.Cog):
 
                 embed = discord.Embed(
                     title=f"Player Statistics - {discord_user.display_name}",
-                    color=discord.Color.blue()
+                    color=discord.Color.dark_theme()
                 )
                 
                 rank_group_display = {
@@ -291,21 +313,32 @@ class StatsCog(commands.Cog):
                 
                 streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
                 embed.add_field(
-                    name="Rank Information",
-                    value=f"Rank: {player.rank}\nRank Group: {rank_group_display[rank_group]}\nPosition: #{position}",
-                    inline=False
+                    name="🎮 Rank Information",
+                    value=(
+                        f"• Rank: {player.rank}\n"
+                        f"• Group: {rank_group_display[rank_group]}\n"
+                        f"• Position: #{position}"
+                    ),
+                    inline=False    
                 )
                 
                 embed.add_field(
-                    name="Statistics",
-                    value=f"Points: {player.points}\nMatches: {player.matches_played}\nWins: {int(player.matches_played * player.winrate / 100)}\nLosses: {int(player.matches_played * (100 - player.winrate) / 100)}\nWinrate: {player.winrate}%\n{streak_text}",
-                    inline=False
+                    name="📊 Statistics",
+                    value=(
+                        f"• Points: {player.points}\n"
+                        f"• Matches: {player.matches_played}\n"
+                        f"• Wins: {int(player.matches_played * player.winrate / 100)}\n"
+                        f"• Losses: {int(player.matches_played * (100 - player.winrate) / 100)}\n"
+                        f"• Winrate: {player.winrate}%\n"
+                        f"{streak_text}"
+                    ),
+                    inline=False    
                 )
                 
                 if position > 1:
                     points_to_next = sorted_players[position-2].points - player.points
                     embed.add_field(
-                        name="Progress",
+                        name="📈 Progress",
                         value=f"Need {points_to_next} more points to reach position #{position-1}",
                         inline=False
                     )

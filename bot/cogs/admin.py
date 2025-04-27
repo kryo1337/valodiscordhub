@@ -302,7 +302,7 @@ class AdminCog(commands.Cog):
             embed = discord.Embed(
                 title="Admin Reports Channel",
                 description="This channel is for admin reports and notifications.",
-                color=discord.Color.blue()
+                color=discord.Color.dark_theme()
             )
             await channel.send(embed=embed)
             
@@ -327,7 +327,7 @@ class AdminCog(commands.Cog):
         source_channel = self.bot.get_channel(source_channel_id)
         if source_channel:
             embed.add_field(
-                name="Match Channel",
+                name="📌 Match Channel",
                 value=source_channel.mention,
                 inline=False
             )
@@ -339,7 +339,12 @@ class AdminReportView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Close Case", style=discord.ButtonStyle.danger, emoji="✅")
+    @discord.ui.button(
+        label="Close Case",
+        style=discord.ButtonStyle.danger,
+        emoji="✅",
+        custom_id="close_case"
+    )
     async def close_case(self, interaction: discord.Interaction, button: discord.ui.Button):
         confirm_view = ConfirmCloseView(interaction.message)
         await interaction.response.send_message("Are you sure you want to close this case?", view=confirm_view, ephemeral=True)
@@ -349,20 +354,30 @@ class ConfirmCloseView(discord.ui.View):
         super().__init__(timeout=60)
         self.message = message
 
-    @discord.ui.button(label="Yes, close case", style=discord.ButtonStyle.danger)
+    @discord.ui.button(
+        label="Yes, close case",
+        style=discord.ButtonStyle.danger,
+        emoji="🔒",
+        custom_id="confirm_close"
+    )
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.message.delete()
-        await interaction.response.send_message("Case closed!", ephemeral=True)
+        await interaction.response.send_message("✅ Case closed!", ephemeral=True)
         self.stop()
 
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(
+        label="Cancel",
+        style=discord.ButtonStyle.secondary,
+        emoji="❌",
+        custom_id="cancel_close"
+    )
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Case closure cancelled.", ephemeral=True)
+        await interaction.response.send_message("❌ Case closure cancelled.", ephemeral=True)
         self.stop()
 
     async def on_timeout(self):
         try:
-            await self.message.channel.send("Case closure timed out.", ephemeral=True)
+            await self.message.channel.send("⏰ Case closure timed out.", ephemeral=True)
         except:
             pass
 

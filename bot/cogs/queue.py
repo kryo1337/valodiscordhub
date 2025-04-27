@@ -105,12 +105,17 @@ class QueueView(discord.ui.View):
         try:
             channel = interaction.channel
             async for message in channel.history(limit=1):
+                rank_group_colors = {
+                    "iron-plat": discord.Color.gold(),
+                    "dia-asc": discord.Color.green(),
+                    "imm-radiant": discord.Color.red()
+                }
+                
                 embed = discord.Embed(
                     title=f"{self.rank_group.upper()} Queue",
-                    color=discord.Color.dark_theme()
+                    color=rank_group_colors[self.rank_group]
                 )
                 
-                # Progress bar for queue
                 progress = min(len(queue.players) * 10, 100)
                 progress_bar = "▰" * (progress // 10) + "▱" * ((100 - progress) // 10)
                 embed.add_field(
@@ -180,9 +185,15 @@ class QueueCog(commands.Cog):
                             channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
                             if channel:
                                 async for message in channel.history(limit=1):
+                                    rank_group_colors = {
+                                        "iron-plat": discord.Color.gold(),
+                                        "dia-asc": discord.Color.green(),
+                                        "imm-radiant": discord.Color.red()
+                                    }
+                                    
                                     embed = discord.Embed(
                                         title=f"{rank_group.upper()} Queue",
-                                        color=discord.Color.dark_theme()
+                                        color=rank_group_colors[rank_group]
                                     )
                                     
                                     progress = min(len(queue.players) * 10, 100)
@@ -240,12 +251,17 @@ class QueueCog(commands.Cog):
                 queue = get_queue(rank_group) or Queue(rank_group=rank_group, players=[])
                 view = QueueView(rank_group)
                 
+                rank_group_colors = {
+                    "iron-plat": discord.Color.gold(),
+                    "dia-asc": discord.Color.green(),
+                    "imm-radiant": discord.Color.red()
+                }
+                
                 embed = discord.Embed(
                     title=f"{rank_group.upper()} Queue",
-                    color=discord.Color.dark_theme()
+                    color=rank_group_colors[rank_group]
                 )
                 
-                # Progress bar for queue
                 progress = min(len(queue.players) * 10, 100)
                 progress_bar = "▰" * (progress // 10) + "▱" * ((100 - progress) // 10)
                 embed.add_field(
@@ -315,9 +331,15 @@ class QueueCog(commands.Cog):
         update_queue("imm-radiant", queue.players)
 
         async for message in channel.history(limit=1):
+            rank_group_colors = {
+                "iron-plat": discord.Color.gold(),
+                "dia-asc": discord.Color.green(),
+                "imm-radiant": discord.Color.red()
+            }
+            
             embed = discord.Embed(
                 title="IMMORTAL-RADIANT Queue",
-                color=discord.Color.dark_theme()
+                color=rank_group_colors["imm-radiant"]
             )
             
             progress = min(len(queue.players) * 10, 100)

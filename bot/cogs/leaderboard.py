@@ -142,9 +142,15 @@ class LeaderboardCog(commands.Cog):
         players = sorted_players[start_idx:end_idx]
         total_pages = (len(sorted_players) + page_size - 1) // page_size
 
+        rank_group_colors = {
+            "iron-plat": discord.Color.gold(),
+            "dia-asc": discord.Color.green(),
+            "imm-radiant": discord.Color.red()
+        }
+        
         embed = discord.Embed(
             title=f"🏆 Leaderboard - {rank_group.upper()}",
-            color=discord.Color.blue()
+            color=rank_group_colors[rank_group]
         )
 
         for i, player in enumerate(players, start=start_idx + 1):
@@ -155,11 +161,17 @@ class LeaderboardCog(commands.Cog):
             except:
                 name = f"<@{player.discord_id}>"
             
-            value = f"Rank: {player.rank} | Points: {player.points} | Winrate: {player.winrate}% | Matches: {player.matches_played} | {streak_text}"
-            embed.add_field(name=f"{i}. {name}", value=value, inline=False)
+            value = (
+                f"• Rank: {player.rank}\n"
+                f"• Points: {player.points}\n"
+                f"• Winrate: {player.winrate}%\n"
+                f"• Matches: {player.matches_played}\n"
+                f"{streak_text}"
+            )
+            embed.add_field(name=f"#{i} {name}", value=value, inline=False)
 
         update_time = self.get_time_difference()
-        embed.set_footer(text=f"Page {page}/{total_pages} | {page_size} players per page | Last update: {update_time}")
+        embed.set_footer(text=f"📄 Page {page}/{total_pages} | 👥 {page_size} players per page")
 
         view = LeaderboardView(self, channel, rank_group, page, total_pages, page_size)
         if user_id:
@@ -211,24 +223,28 @@ class RankGroupSelect(discord.ui.Select):
             discord.SelectOption(
                 label="Iron - Platinum",
                 value="iron-plat",
-                description="View Iron to Platinum leaderboard"
+                description="View Iron to Platinum leaderboard",
+                emoji="🥉"
             ),
             discord.SelectOption(
                 label="Diamond - Ascendant",
                 value="dia-asc",
-                description="View Diamond to Ascendant leaderboard"
+                description="View Diamond to Ascendant leaderboard",
+                emoji="💎"
             ),
             discord.SelectOption(
                 label="Immortal - Radiant",
                 value="imm-radiant",
-                description="View Immortal to Radiant leaderboard"
+                description="View Immortal to Radiant leaderboard",
+                emoji="🔥"
             )
         ]
         super().__init__(
             placeholder="Select rank group",
             min_values=1,
             max_values=1,
-            options=options
+            options=options,
+            custom_id="rank_group"
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -241,7 +257,12 @@ class RankGroupSelect(discord.ui.Select):
 
 class FirstPageButton(discord.ui.Button):
     def __init__(self, view):
-        super().__init__(label="⏮️", style=discord.ButtonStyle.primary)
+        super().__init__(
+            label="First",
+            emoji="⏮️",
+            style=discord.ButtonStyle.secondary,
+            custom_id="first_page"
+        )
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -250,7 +271,12 @@ class FirstPageButton(discord.ui.Button):
 
 class PreviousPageButton(discord.ui.Button):
     def __init__(self, view):
-        super().__init__(label="◀️", style=discord.ButtonStyle.primary)
+        super().__init__(
+            label="Previous",
+            emoji="◀️",
+            style=discord.ButtonStyle.secondary,
+            custom_id="prev_page"
+        )
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -261,7 +287,12 @@ class PreviousPageButton(discord.ui.Button):
 
 class NextPageButton(discord.ui.Button):
     def __init__(self, view):
-        super().__init__(label="▶️", style=discord.ButtonStyle.primary)
+        super().__init__(
+            label="Next",
+            emoji="▶️",
+            style=discord.ButtonStyle.secondary,
+            custom_id="next_page"
+        )
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -272,7 +303,12 @@ class NextPageButton(discord.ui.Button):
 
 class LastPageButton(discord.ui.Button):
     def __init__(self, view):
-        super().__init__(label="⏭️", style=discord.ButtonStyle.primary)
+        super().__init__(
+            label="Last",
+            emoji="⏭️",
+            style=discord.ButtonStyle.secondary,
+            custom_id="last_page"
+        )
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -283,14 +319,19 @@ class LastPageButton(discord.ui.Button):
 class PageSizeSelect(discord.ui.Select):
     def __init__(self, view):
         options = [
-            discord.SelectOption(label=f"{size} players", value=str(size))
+            discord.SelectOption(
+                label=f"{size} players",
+                value=str(size),
+                emoji="👥"
+            )
             for size in view.cog.page_sizes
         ]
         super().__init__(
             placeholder="Players per page",
             min_values=1,
             max_values=1,
-            options=options
+            options=options,
+            custom_id="page_size"
         )
 
     async def callback(self, interaction: discord.Interaction):
