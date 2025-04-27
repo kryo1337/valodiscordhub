@@ -5,7 +5,7 @@ from typing import Optional, Literal
 import os
 import asyncio
 from dotenv import load_dotenv
-from utils.db import get_match, update_match_result, get_active_matches, get_leaderboard, update_leaderboard, get_player
+from utils.db import get_match, update_match_result, get_active_matches, get_leaderboard, update_leaderboard, get_player, add_admin_log, remove_admin_log, is_player_banned, is_player_timeout, get_queue, remove_player_from_queue
 from db.models.leaderboard import LeaderboardEntry
 from .leaderboard import LeaderboardCog
 
@@ -166,6 +166,12 @@ class AdminCog(commands.Cog):
 
         if result == "cancelled" and match.result and match.result != "cancelled":
             await self.revert_leaderboard_points(match_id, match.result)
+            add_admin_log(
+                action="revert_match",
+                admin_discord_id=str(interaction.user.id),
+                match_id=match_id,
+                reason="Match result reverted due to cancellation"
+            )
 
         update_match_result(
             match_id=match_id,
@@ -176,6 +182,19 @@ class AdminCog(commands.Cog):
 
         if result != "cancelled":
             await self.update_leaderboard_points(match_id, result)
+            add_admin_log(
+                action="set_result",
+                admin_discord_id=str(interaction.user.id),
+                match_id=match_id,
+                reason=f"Match result set to {result} (Red: {red_score}, Blue: {blue_score})"
+            )
+        else:
+            add_admin_log(
+                action="cancel_match",
+                admin_discord_id=str(interaction.user.id),
+                match_id=match_id,
+                reason="Match cancelled by admin"
+            )
 
         await interaction.followup.send(
             f"✅ Match result updated!\n"
@@ -334,6 +353,123 @@ class AdminCog(commands.Cog):
             
         view = AdminReportView()
         return await channel.send(embed=embed, view=view)
+
+    @app_commands.command(name="ban")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.describe(
+        user="The user to ban",
+        reason="The reason for the ban"
+    )
+    async def ban(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        reason: str
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        if is_player_banned(str(user.id)):
+            await interaction.followup.send(f"❌ {user.mention} is already banned!", ephemeral=True)
+            return
+
+        add_admin_log("ban", str(interaction.user.id), str(user.id), reason=reason)
+        
+        embed = discord.Embed(
+            title="🔨 User Banned",
+            description=f"{user.mention} has been banned from the queue system.",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="Reason", value=reason, inline=False)
+        embed.add_field(name="Banned by", value=interaction.user.mention, inline=False)
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        
+        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
+        for rank_group in rank_groups:
+            try:
+                queue = get_queue(rank_group)
+                if queue and any(p.discord_id == str(user.id) for p in queue.players):
+                    remove_player_from_queue(rank_group, str(user.id))
+            except Exception as e:
+                print(f"Error removing banned player from queue {rank_group}: {e}")
+
+    @app_commands.command(name="timeout")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.describe(
+        user="The user to timeout",
+        reason="The reason for the timeout",
+        duration="Duration in minutes"
+    )
+    async def timeout(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        reason: str,
+        duration: int
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        if is_player_timeout(str(user.id)):
+            await interaction.followup.send(f"❌ {user.mention} is already in timeout!", ephemeral=True)
+            return
+
+        add_admin_log("timeout", str(interaction.user.id), str(user.id), reason=reason, duration_minutes=duration)
+        
+        embed = discord.Embed(
+            title="⏰ User Timed Out",
+            description=f"{user.mention} has been timed out from the queue system for {duration} minutes.",
+            color=discord.Color.orange()
+        )
+        embed.add_field(name="Reason", value=reason, inline=False)
+        embed.add_field(name="Duration", value=f"{duration} minutes", inline=False)
+        embed.add_field(name="Timed out by", value=interaction.user.mention, inline=False)
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        
+        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
+        for rank_group in rank_groups:
+            try:
+                queue = get_queue(rank_group)
+                if queue and any(p.discord_id == str(user.id) for p in queue.players):
+                    remove_player_from_queue(rank_group, str(user.id))
+            except Exception as e:
+                print(f"Error removing timed out player from queue {rank_group}: {e}")
+
+    @app_commands.command(name="unban")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.describe(
+        user="The user to unban"
+    )
+    async def unban(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        was_banned = is_player_banned(str(user.id))
+        was_timeout = is_player_timeout(str(user.id))
+
+        if not was_banned and not was_timeout:
+            await interaction.followup.send(f"❌ {user.mention} is not banned or in timeout!", ephemeral=True)
+            return
+
+        if was_banned:
+            remove_admin_log("ban", str(user.id))
+        if was_timeout:
+            remove_admin_log("timeout", str(user.id))
+        
+        embed = discord.Embed(
+            title="✅ User Unbanned",
+            description=f"{user.mention} has been unbanned from the queue system.",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="Unbanned by", value=interaction.user.mention, inline=False)
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 class AdminReportView(discord.ui.View):
     def __init__(self):

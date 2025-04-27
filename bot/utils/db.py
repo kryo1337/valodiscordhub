@@ -175,3 +175,53 @@ def get_match_history(limit: Optional[int] = 10) -> List[Match]:
         matches = db.matches.find(query, sort=sort)
         
     return [Match(**match) for match in matches]
+
+def get_banned_players() -> List[dict]:
+    return list(db.admin_logs.find(
+        {"action": "ban", "target_discord_id": {"$exists": True}},
+        {"target_discord_id": 1, "reason": 1, "timestamp": 1}
+    ))
+
+def get_timeout_players() -> List[dict]:
+    return list(db.admin_logs.find(
+        {"action": "timeout", "target_discord_id": {"$exists": True}},
+        {"target_discord_id": 1, "reason": 1, "duration_minutes": 1, "timestamp": 1}
+    ))
+
+def is_player_banned(discord_id: str) -> bool:
+    return bool(db.admin_logs.find_one(
+        {"action": "ban", "target_discord_id": discord_id}
+    ))
+
+def is_player_timeout(discord_id: str) -> bool:
+    timeout = db.admin_logs.find_one(
+        {"action": "timeout", "target_discord_id": discord_id}
+    )
+    if not timeout:
+        return False
+    
+    timeout_time = timeout["timestamp"]
+    duration = timeout["duration_minutes"]
+    current_time = datetime.now(timezone.utc)
+    time_diff = (current_time - timeout_time).total_seconds() / 60
+    
+    return time_diff < duration
+
+def add_admin_log(action: str, admin_discord_id: str, target_discord_id: Optional[str] = None, 
+                 match_id: Optional[str] = None, reason: Optional[str] = None, 
+                 duration_minutes: Optional[int] = None) -> None:
+    log = {
+        "action": action,
+        "admin_discord_id": admin_discord_id,
+        "target_discord_id": target_discord_id,
+        "match_id": match_id,
+        "reason": reason,
+        "duration_minutes": duration_minutes,
+        "timestamp": datetime.now(timezone.utc)
+    }
+    db.admin_logs.insert_one(log)
+
+def remove_admin_log(action: str, target_discord_id: str) -> None:
+    db.admin_logs.delete_one(
+        {"action": action, "target_discord_id": target_discord_id}
+    )

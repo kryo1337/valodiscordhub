@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
 from db.models.queue import QueueEntry, Queue
@@ -12,6 +12,8 @@ from utils.db import (
     remove_player_from_queue,
     create_player,
     update_queue,
+    is_player_banned,
+    is_player_timeout,
 )
 from .match import create_match
 
@@ -59,6 +61,30 @@ class QueueView(discord.ui.View):
                 "You need to register first using `/rank` command!", ephemeral=True
             )
             return
+
+        if is_player_banned(user_id):
+            ban_log = db.admin_logs.find_one({"action": "ban", "target_discord_id": user_id})
+            reason = ban_log["reason"] if ban_log else "No reason provided"
+            await interaction.response.send_message(
+                f"❌ You are banned from the queue system!\nReason: {reason}",
+                ephemeral=True
+            )
+            return
+
+        if is_player_timeout(user_id):
+            timeout_log = db.admin_logs.find_one({"action": "timeout", "target_discord_id": user_id})
+            if timeout_log:
+                timeout_time = timeout_log["timestamp"]
+                duration = timeout_log["duration_minutes"]
+                current_time = datetime.now(timezone.utc)
+                time_diff = (current_time - timeout_time).total_seconds() / 60
+                remaining_time = int(duration - time_diff)
+                reason = timeout_log["reason"] if "reason" in timeout_log else "No reason provided"
+                await interaction.response.send_message(
+                    f"⏰ You are in timeout for {remaining_time} more minutes!\nReason: {reason}",
+                    ephemeral=True
+                )
+                return
 
         try:
             queue = get_queue(self.rank_group)
