@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
-from utils.db import get_player_rank, get_leaderboard_page
+from utils.db import get_player_rank, get_leaderboard_page, get_player
 import os
 from dotenv import load_dotenv
 from datetime import datetime, timezone
@@ -117,7 +117,7 @@ class StatsCog(commands.Cog):
                 
                 streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
                 embed.add_field(
-                    name="🎮 Rank Information",
+                    name="Rank Information",
                     value=(
                         f"• Rank: {player.rank}\n"
                         f"• Group: {rank_group_display[rank_group]}\n"
@@ -219,7 +219,7 @@ class StatsCog(commands.Cog):
         
         streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
         embed.add_field(
-            name="🎮 Rank Information",
+            name="Rank Information",
             value=(
                 f"• Rank: {player.rank}\n"
                 f"• Group: {rank_group_display[rank_group]}\n"
@@ -285,6 +285,10 @@ class StatsCog(commands.Cog):
                 if not discord_user:
                     continue
 
+                db_player = get_player(player.discord_id)
+                if not db_player:
+                    continue
+
                 rank_group = None
                 for role in discord_user.roles:
                     if role.name in ["iron-plat", "dia-asc", "imm-radiant"]:
@@ -313,9 +317,9 @@ class StatsCog(commands.Cog):
                 
                 streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
                 embed.add_field(
-                    name="🎮 Rank Information",
+                    name="Rank Information",
                     value=(
-                        f"• Rank: {player.rank}\n"
+                        f"• Rank: {db_player.rank}\n"
                         f"• Group: {rank_group_display[rank_group]}\n"
                         f"• Position: #{position}"
                     ),

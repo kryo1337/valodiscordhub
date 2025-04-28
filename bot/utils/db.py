@@ -135,7 +135,12 @@ def get_active_matches() -> List[Match]:
 def get_leaderboard(rank_group: str) -> Leaderboard:
     leaderboard_data = db.leaderboards.find_one({"rank_group": rank_group})
     if leaderboard_data:
-        return Leaderboard(**leaderboard_data)
+        leaderboard = Leaderboard(**leaderboard_data)
+        leaderboard.players = [
+            player for player in leaderboard.players 
+            if not is_player_banned(player.discord_id)
+        ]
+        return leaderboard
     return Leaderboard(rank_group=rank_group)
 
 def update_leaderboard(rank_group: str, players: List[LeaderboardEntry]) -> Leaderboard:

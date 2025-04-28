@@ -132,7 +132,7 @@ class QueueView(discord.ui.View):
             channel = interaction.channel
             async for message in channel.history(limit=1):
                 rank_group_colors = {
-                    "iron-plat": discord.Color.gold(),
+                    "iron-plat": discord.Color.blue(),
                     "dia-asc": discord.Color.green(),
                     "imm-radiant": discord.Color.red()
                 }
@@ -212,7 +212,7 @@ class QueueCog(commands.Cog):
                             if channel:
                                 async for message in channel.history(limit=1):
                                     rank_group_colors = {
-                                        "iron-plat": discord.Color.gold(),
+                                        "iron-plat": discord.Color.blue(),
                                         "dia-asc": discord.Color.green(),
                                         "imm-radiant": discord.Color.red()
                                     }
@@ -278,7 +278,7 @@ class QueueCog(commands.Cog):
                 view = QueueView(rank_group)
                 
                 rank_group_colors = {
-                    "iron-plat": discord.Color.gold(),
+                    "iron-plat": discord.Color.blue(),
                     "dia-asc": discord.Color.green(),
                     "imm-radiant": discord.Color.red()
                 }
@@ -358,7 +358,7 @@ class QueueCog(commands.Cog):
 
         async for message in channel.history(limit=1):
             rank_group_colors = {
-                "iron-plat": discord.Color.gold(),
+                "iron-plat": discord.Color.blue(),
                 "dia-asc": discord.Color.green(),
                 "imm-radiant": discord.Color.red()
             }

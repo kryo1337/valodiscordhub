@@ -5,7 +5,7 @@ from typing import Optional, Literal
 import os
 import asyncio
 from dotenv import load_dotenv
-from utils.db import get_match, update_match_result, get_active_matches, get_leaderboard, update_leaderboard, get_player, add_admin_log, remove_admin_log, is_player_banned, is_player_timeout, get_queue, remove_player_from_queue
+from utils.db import get_match, update_match_result, get_active_matches, get_leaderboard, update_leaderboard, get_player, add_admin_log, remove_admin_log, is_player_banned, is_player_timeout, get_queue, remove_player_from_queue, update_player_rank
 from db.models.leaderboard import LeaderboardEntry
 from .leaderboard import LeaderboardCog
 
@@ -470,6 +470,168 @@ class AdminCog(commands.Cog):
         embed.add_field(name="Unbanned by", value=interaction.user.mention, inline=False)
         
         await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="set_rank")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def set_rank(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        rank: str
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            rank_group = self.get_rank_group(rank)
+            if not rank_group:
+                await interaction.followup.send("Invalid rank!", ephemeral=True)
+                return
+
+            for role_name in ["iron-plat", "dia-asc", "imm-radiant"]:
+                if role_name != rank_group:
+                    role = discord.utils.get(interaction.guild.roles, name=role_name)
+                    if role and role in user.roles:
+                        await user.remove_roles(role)
+
+            new_role = discord.utils.get(interaction.guild.roles, name=rank_group)
+            if new_role and new_role not in user.roles:
+                await user.add_roles(new_role)
+
+            player = get_player(str(user.id))
+            if not player:
+                await interaction.followup.send(f"❌ {user.mention} is not registered!", ephemeral=True)
+                return
+
+            player.rank = rank
+            update_player(player)
+
+            leaderboard = get_leaderboard(rank_group)
+            if leaderboard:
+                for entry in leaderboard.players:
+                    if entry.discord_id == str(user.id):
+                        entry.rank = rank
+                        break
+                update_leaderboard(rank_group, leaderboard.players)
+
+            stats_cog = interaction.client.get_cog("StatsCog")
+            if stats_cog:
+                for channel_id in stats_cog.stats_channels:
+                    channel = interaction.client.get_channel(channel_id)
+                    if channel:
+                        await stats_cog.update_player_stats(channel, [str(user.id)])
+
+            leaderboard_cog = interaction.client.get_cog("LeaderboardCog")
+            if leaderboard_cog:
+                await leaderboard_cog.update_leaderboard()
+
+            add_admin_log(
+                action="set_rank",
+                admin_discord_id=str(interaction.user.id),
+                target_discord_id=str(user.id),
+                reason=f"Rank set to {rank}"
+            )
+
+            await interaction.followup.send(f"✅ Set {user.mention}'s rank to {rank}!", ephemeral=True)
+        except Exception as e:
+            print(f"Error in set_rank: {e}")
+            await interaction.followup.send("❌ Failed to set rank!", ephemeral=True)
+
+    @app_commands.command(name="set_points")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.describe(
+        user="The user to set points for",
+        points="The new points value"
+    )
+    async def set_points(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        points: int
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            player = get_player(str(user.id))
+            if not player:
+                await interaction.followup.send(f"❌ {user.mention} is not registered!", ephemeral=True)
+                return
+
+            player.points = points
+            db.players.update_one(
+                {"discord_id": str(user.id)},
+                {"$set": {"points": points}}
+            )
+
+            rank_group = self.get_rank_group(player.rank)
+            leaderboard = get_leaderboard(rank_group)
+            for entry in leaderboard.players:
+                if entry.discord_id == str(user.id):
+                    entry.points = points
+                    break
+            update_leaderboard(rank_group, leaderboard.players)
+
+            add_admin_log(
+                action="set_points",
+                admin_discord_id=str(interaction.user.id),
+                target_discord_id=str(user.id),
+                reason=f"Points set to {points}"
+            )
+
+            await interaction.followup.send(
+                f"✅ {user.mention}'s points have been set to **{points}**",
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ An error occurred: {str(e)}",
+                ephemeral=True
+            )
+
+    @app_commands.command(name="refresh_all")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def refresh_all(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            queue_cog = self.bot.get_cog("QueueCog")
+            leaderboard_cog = self.bot.get_cog("LeaderboardCog")
+            rank_cog = self.bot.get_cog("Rank")
+            history_cog = self.bot.get_cog("HistoryCog")
+            stats_cog = self.bot.get_cog("StatsCog")
+
+            if queue_cog:
+                await queue_cog.setup_existing_queues()
+                await interaction.followup.send("✅ Queue channels refreshed", ephemeral=True)
+
+            if leaderboard_cog:
+                await leaderboard_cog.setup_existing_leaderboards()
+                await interaction.followup.send("✅ Leaderboard channel refreshed", ephemeral=True)
+
+            if rank_cog:
+                await rank_cog.setup_existing_rank_channel()
+                await interaction.followup.send("✅ Rank channel refreshed", ephemeral=True)
+
+            if history_cog:
+                await history_cog.setup_existing_history_channels()
+                await interaction.followup.send("✅ History channel refreshed", ephemeral=True)
+
+            if stats_cog:
+                await stats_cog.setup_existing_stats_channels()
+                await interaction.followup.send("✅ Stats channel refreshed", ephemeral=True)
+
+            await interaction.followup.send(
+                "✅ All channels have been refreshed!",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Failed to refresh channels: {str(e)}",
+                ephemeral=True
+            )
 
 class AdminReportView(discord.ui.View):
     def __init__(self):

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 
 class AdminLog(BaseModel):
-    action: Literal["ban", "cancel_match", "revert_match", "timeout"]
+    action: Literal["ban", "cancel_match", "revert_match", "timeout", "set_rank", "set_points"]
     admin_discord_id: str
     target_discord_id: Optional[str] = None
     match_id: Optional[str] = None

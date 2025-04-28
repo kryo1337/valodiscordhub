@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
-from utils.db import get_leaderboard_page, get_total_pages, get_player_rank, update_leaderboard
+from utils.db import get_leaderboard_page, get_total_pages, get_player_rank, update_leaderboard, get_player
 from db.models.leaderboard import Leaderboard, LeaderboardEntry
 import os
 from dotenv import load_dotenv
@@ -143,7 +143,7 @@ class LeaderboardCog(commands.Cog):
         total_pages = (len(sorted_players) + page_size - 1) // page_size
 
         rank_group_colors = {
-            "iron-plat": discord.Color.gold(),
+            "iron-plat": discord.Color.blue(),
             "dia-asc": discord.Color.green(),
             "imm-radiant": discord.Color.red()
         }
@@ -161,8 +161,12 @@ class LeaderboardCog(commands.Cog):
             except:
                 name = f"<@{player.discord_id}>"
             
+            db_player = get_player(player.discord_id)
+            if not db_player:
+                continue
+            
             value = (
-                f"• Rank: {player.rank}\n"
+                f"• Rank: {db_player.rank}\n"
                 f"• Points: {player.points}\n"
                 f"• Winrate: {player.winrate}%\n"
                 f"• Matches: {player.matches_played}\n"

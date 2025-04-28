@@ -531,10 +531,9 @@ class ScoreSubmissionView(discord.ui.View):
         if message:
             self.admin_called = True
             if self.message:
-                content = self.message.content + "\n\n⚠️ Admin has been called for this match"
                 button.disabled = True
-                await self.message.edit(content=content, view=self)
-            await interaction.response.send_message("Admin has been notified!", ephemeral=True)
+                await self.message.edit(view=self)
+            await interaction.response.send_message("⚠️ Admin has been called for this match!", ephemeral=False)
         else:
             await interaction.response.send_message("Failed to send admin report!", ephemeral=True)
 
