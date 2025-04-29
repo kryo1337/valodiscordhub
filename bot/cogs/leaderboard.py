@@ -14,7 +14,7 @@ class LeaderboardCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.leaderboard_channels = {}
-        self.page_sizes = [10, 25, 50]
+        self.page_sizes = [5, 10, 25, 50]
         self.current_page_sizes = {}
         self.last_update = None
         self.bot.add_listener(self.on_ready)
