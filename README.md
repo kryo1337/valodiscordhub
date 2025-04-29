@@ -9,7 +9,10 @@ A Discord bot that provides a comprehensive Valorant matchmaking and statistics 
 - Role selection interface with buttons for each role
 - Queue status and player count display
 - Auto-timeout system for inactive players
-![Queue Channel Interface](assets/queue.png)
+
+<p align="center">
+  <img src="assets/queue.png" alt="Queue Channel Interface">
+</p>
 
 ### Match
 - Team selection interface with captain-based picking
@@ -19,31 +22,46 @@ A Discord bot that provides a comprehensive Valorant matchmaking and statistics 
 - Auto-cleanup of match channels after completion
 
 Team Selection:
-![Match Team Selection Interface](assets/matchselection.png)
+
+<p align="center">
+  <img src="assets/matchselection.png" alt="Match Team Selection Interface">
+</p>
 
 Score Submission:
-![Match Score Submission Interface](assets/matchsubmission.png)
+
+<p align="center">
+  <img src="assets/matchsubmission.png" alt="Match Score Submission Interface">
+</p>
 
 ### Rank
 - Rank verification interface with Riot ID input
 - Automatic rank role assignment
 - Rank updates and tracking system
 - Rank group categorization
-![Rank Channel Interface](assets/rank.png)
+
+<p align="center">
+  <img src="assets/rank.png" alt="Rank Channel Interface">
+</p>
 
 ### Leaderboard
 - Global leaderboard with points system
 - Rank-specific leaderboards
 - Performance statistics and rankings
 - Paginated leaderboard display
-![Leaderboard Channel Interface](assets/leaderboard.png)
+
+<p align="center">
+  <img src="assets/leaderboard.png" alt="Leaderboard Channel Interface">
+</p>
 
 ### History
 - Match history with detailed results
 - Player statistics and performance tracking
 - Performance trends and analysis
 - Historical match data
-![History Channel Interface](assets/history.png)
+
+<p align="center">
+  <img src="assets/history.png" alt="History Channel Interface">
+</p>
 
 ### Stats
 - Real-time player statistics
@@ -51,7 +69,10 @@ Score Submission:
 - Role-specific statistics
 - Historical performance tracking
 - Win rate and KDA analytics
-![Stats Channel Interface](assets/stats.png)
+
+<p align="center">
+  <img src="assets/stats.png" alt="Stats Channel Interface">
+</p>
 
 ### Admin
 - Match management interface
@@ -59,7 +80,10 @@ Score Submission:
 - Queue control and monitoring
 - System configuration settings
 - Match dispute resolution
-![Admin Channel Interface](assets/admin.png)
+
+<p align="center">
+  <img src="assets/admin.png" alt="Admin Channel Interface">
+</p>
 
 ## Technical Stack
 - Python-based Discord bot
