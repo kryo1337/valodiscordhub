@@ -9,7 +9,7 @@ A Discord bot that provides a comprehensive Valorant matchmaking and statistics 
 - Role selection interface with buttons for each role
 - Queue status and player count display
 - Auto-timeout system for inactive players
-![Queue Channel Interface](assets/screenshots/queue.png)
+![Queue Channel Interface](assets/queue.png)
 
 ### Match
 - Team selection interface with captain-based picking
@@ -19,31 +19,31 @@ A Discord bot that provides a comprehensive Valorant matchmaking and statistics 
 - Auto-cleanup of match channels after completion
 
 Team Selection:
-![Match Team Selection Interface](assets/screenshots/matchselection.png)
+![Match Team Selection Interface](assets/matchselection.png)
 
 Score Submission:
-![Match Score Submission Interface](assets/screenshots/matchsubmission.png)
+![Match Score Submission Interface](assets/matchsubmission.png)
 
 ### Rank
 - Rank verification interface with Riot ID input
 - Automatic rank role assignment
 - Rank updates and tracking system
 - Rank group categorization
-![Rank Channel Interface](assets/screenshots/rank.png)
+![Rank Channel Interface](assets/rank.png)
 
 ### Leaderboard
 - Global leaderboard with points system
 - Rank-specific leaderboards
 - Performance statistics and rankings
 - Paginated leaderboard display
-![Leaderboard Channel Interface](assets/screenshots/leaderboard.png)
+![Leaderboard Channel Interface](assets/leaderboard.png)
 
 ### History
 - Match history with detailed results
 - Player statistics and performance tracking
 - Performance trends and analysis
 - Historical match data
-![History Channel Interface](assets/screenshots/history.png)
+![History Channel Interface](assets/history.png)
 
 ### Stats
 - Real-time player statistics
@@ -51,7 +51,7 @@ Score Submission:
 - Role-specific statistics
 - Historical performance tracking
 - Win rate and KDA analytics
-![Stats Channel Interface](assets/screenshots/stats.png)
+![Stats Channel Interface](assets/stats.png)
 
 ### Admin
 - Match management interface
@@ -59,7 +59,7 @@ Score Submission:
 - Queue control and monitoring
 - System configuration settings
 - Match dispute resolution
-![Admin Channel Interface](assets/screenshots/admin.png)
+![Admin Channel Interface](assets/admin.png)
 
 ## Technical Stack
 - Python-based Discord bot
