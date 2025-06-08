@@ -7,7 +7,7 @@ import random
 from db.models.queue import QueueEntry
 from utils.db import update_match_defense, get_match, update_match_teams, update_match_result
 from utils.db import create_match as create_match_db
-from utils.db import get_leaderboard_page, update_leaderboard, get_leaderboard
+from utils.db import get_leaderboard_page, update_leaderboard, get_leaderboard, get_player
 from db.models.leaderboard import LeaderboardEntry
 from .leaderboard import LeaderboardCog
 import time
@@ -632,7 +632,11 @@ class ScoreSubmissionView(discord.ui.View):
         updated_entries = []
 
         all_match_players = self.red_team + self.blue_team
-        player_ranks = {p.discord_id: p.rank for p in match.players}
+        player_ranks = {}
+        for player_id in all_match_players:
+            player = get_player(player_id)
+            if player and player.rank:
+                player_ranks[player_id] = player.rank
 
         winning_team = self.red_team if winner == "red" else self.blue_team
         for player_id in winning_team:
@@ -706,29 +710,27 @@ class ScoreSubmissionView(discord.ui.View):
             if self.red_score != self.blue_score:
                 admin_cog = interaction.client.get_cog("AdminCog")
                 if admin_cog and admin_cog.admin_channel_id:
-                    admin_channel = interaction.client.get_channel(admin_cog.admin_channel_id)
-                    if admin_channel:
-                        embed = discord.Embed(
-                            title="⚠️ Score Discrepancy Detected",
-                            description=f"Match ID: {self.match_id}",
-                            color=discord.Color.red()
-                        )
-                        embed.add_field(
-                            name="Red Team Captain",
-                            value=f"<@{self.red_captain}> submitted: {self.red_score[0]}-{self.red_score[1]}",
-                            inline=False
-                        )
-                        embed.add_field(
-                            name="Blue Team Captain",
-                            value=f"<@{self.blue_captain}> submitted: {self.blue_score[0]}-{self.blue_score[1]}",
-                            inline=False
-                        )
-                        embed.add_field(
-                            name="Teams",
-                            value=f"🔴 Red: {', '.join([f'<@{id}>' for id in self.red_team])}\n🔵 Blue: {', '.join([f'<@{id}>' for id in self.blue_team])}",
-                            inline=False
-                        )
-                        await admin_channel.send(embed=embed)
+                    embed = discord.Embed(
+                        title="⚠️ Score Discrepancy Detected",
+                        description=f"Match ID: {self.match_id}",
+                        color=discord.Color.red()
+                    )
+                    embed.add_field(
+                        name="Red Team Captain",
+                        value=f"<@{self.red_captain}> submitted: {self.red_score[0]}-{self.red_score[1]}",
+                        inline=False
+                    )
+                    embed.add_field(
+                        name="Blue Team Captain",
+                        value=f"<@{self.blue_captain}> submitted: {self.blue_score[0]}-{self.blue_score[1]}",
+                        inline=False
+                    )
+                    embed.add_field(
+                        name="Teams",
+                        value=f"🔴 Red: {', '.join([f'<@{id}>' for id in self.red_team])}\n🔵 Blue: {', '.join([f'<@{id}>' for id in self.blue_team])}",
+                        inline=False
+                    )
+                    await admin_cog.send_admin_report(self.match_id, interaction.channel_id, embed)
 
                 embed = discord.Embed(
                     title="⚠️ Score Discrepancy",
@@ -741,7 +743,8 @@ class ScoreSubmissionView(discord.ui.View):
                 )
                 await interaction.channel.send(embed=embed)
             else:
-                red_score, blue_score = self.red_score
+                red_score = self.red_score[0]
+                blue_score = self.red_score[1]
                 winner = "red" if red_score > blue_score else "blue"
                 
                 update_match_result(
@@ -812,29 +815,30 @@ class ScoreModal(discord.ui.Modal):
                     description="Scores must be between 0 and 13.",
                     color=discord.Color.red()
                 )
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await interaction.response.send_message(embed=embed)
                 return
 
             if self.team == "red":
                 self.view.red_score = (team_score, opponent_score)
             else:
-                self.view.blue_score = (team_score, opponent_score)
+                self.view.blue_score = (opponent_score, team_score)
 
             await self.view.check_scores(interaction)
             
+            team_name = "🔴 Red Team" if self.team == "red" else "🔵 Blue Team"
             embed = discord.Embed(
                 title="Score Submitted",
-                description=f"Your score ({team_score}-{opponent_score}) has been recorded.",
+                description=f"{team_name} Captain <@{interaction.user.id}> submitted score: {team_score}-{opponent_score}",
                 color=discord.Color.green()
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed)
         except ValueError:
             embed = discord.Embed(
                 title="Invalid Input",
                 description="Please enter valid numbers!",
                 color=discord.Color.red()
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed)
 
 async def create_match(guild: discord.Guild, rank_group: str, players: List[QueueEntry]):
     match_id = f"match_{datetime.now().strftime('%Y%m%d_%H%M%S')}"

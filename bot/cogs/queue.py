@@ -315,8 +315,13 @@ class QueueCog(commands.Cog):
     @app_commands.command(name="test_queue")
     @app_commands.default_permissions(administrator=True)
     @app_commands.guilds(discord.Object(id=GUILD_ID))
-    async def test_queue(self, interaction: discord.Interaction):
+    @app_commands.describe(count="Number of test players to add to queue")
+    async def test_queue(self, interaction: discord.Interaction, count: int = 9):
         await interaction.response.defer(ephemeral=True)
+
+        if count < 1 or count > 10:
+            await interaction.followup.send("❌ Count must be between 1 and 10", ephemeral=True)
+            return
 
         category = discord.utils.get(interaction.guild.categories, name="valohub")
         if not category:
@@ -333,7 +338,7 @@ class QueueCog(commands.Cog):
             return
 
         test_players = []
-        for i in range(9):
+        for i in range(count):
             discord_id = f"test_user_{i}"
             riot_id = f"TestUser{i}"
             rank = "Immortal 3"
@@ -388,7 +393,7 @@ class QueueCog(commands.Cog):
             break
 
         await interaction.followup.send(
-            "✅ Added 9 test players to the queue!", ephemeral=True
+            f"✅ Added {count} test players to the queue!", ephemeral=True
         )
 
     @app_commands.command(name="setup_queue")

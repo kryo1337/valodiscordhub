@@ -50,7 +50,7 @@ class StatsCog(commands.Cog):
 
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(
-                view_channel=True,
+                view_channel=False,
                 send_messages=False
             ),
             interaction.guild.me: discord.PermissionOverwrite(
@@ -59,6 +59,14 @@ class StatsCog(commands.Cog):
                 manage_channels=True
             ),
         }
+
+        for role_name in ["iron-plat", "dia-asc", "imm-radiant"]:
+            role = discord.utils.get(interaction.guild.roles, name=role_name)
+            if role:
+                overwrites[role] = discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=False
+                )
 
         channel = await category.create_text_channel(
             name="stats",
@@ -151,7 +159,7 @@ class StatsCog(commands.Cog):
                         inline=False
                     )
                 
-                await channel.send(embed=embed)
+                await channel.send(embed=embed, allowed_mentions=[discord.AllowedMentions(users=[discord_user])])
                 has_players = True
             except Exception as e:
                 print(f"Error updating stats for player {player.discord_id}: {e}")
@@ -163,17 +171,6 @@ class StatsCog(commands.Cog):
                 color=discord.Color.dark_theme()
             )
             await channel.send(embed=embed)
-
-    @tasks.loop(minutes=5)
-    async def update_stats_channels(self):
-        for channel_id in self.stats_channels:
-            channel = self.bot.get_channel(channel_id)
-            if channel:
-                await self.update_stats_display(channel)
-
-    @update_stats_channels.before_loop
-    async def before_update_stats_channels(self):
-        await self.bot.wait_until_ready()
 
     @app_commands.command(name="stats", description="Display player statistics")
     @app_commands.guilds(discord.Object(id=GUILD_ID))

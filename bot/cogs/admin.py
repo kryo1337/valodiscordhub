@@ -352,7 +352,8 @@ class AdminCog(commands.Cog):
             )
             
         view = AdminReportView()
-        return await channel.send(embed=embed, view=view)
+        message = await channel.send(embed=embed, view=view)
+        return message
 
     @app_commands.command(name="ban")
     @app_commands.default_permissions(administrator=True)
@@ -644,6 +645,10 @@ class AdminReportView(discord.ui.View):
         custom_id="close_case"
     )
     async def close_case(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You don't have permission to close cases!", ephemeral=True)
+            return
+            
         confirm_view = ConfirmCloseView(interaction.message)
         await interaction.response.send_message("Are you sure you want to close this case?", view=confirm_view, ephemeral=True)
 
@@ -659,6 +664,10 @@ class ConfirmCloseView(discord.ui.View):
         custom_id="confirm_close"
     )
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You don't have permission to close cases!", ephemeral=True)
+            return
+            
         await self.message.delete()
         await interaction.response.send_message("✅ Case closed!", ephemeral=True)
         self.stop()
