@@ -104,6 +104,10 @@ class StatsCog(commands.Cog):
                         position = i
                         break
 
+                db_player = get_player(player.discord_id)
+                if not db_player:
+                    continue
+
                 embed = discord.Embed(
                     title=f"Player Statistics - {discord_user.display_name}",
                     color=discord.Color.dark_theme()
@@ -119,7 +123,7 @@ class StatsCog(commands.Cog):
                 embed.add_field(
                     name="Rank Information",
                     value=(
-                        f"• Rank: {player.rank}\n"
+                        f"• Rank: {db_player.rank}\n"
                         f"• Group: {rank_group_display[rank_group]}\n"
                         f"• Position: #{position}"
                     ),
@@ -181,7 +185,11 @@ class StatsCog(commands.Cog):
         await interaction.response.defer()
         
         target_id = str(user.id)
-        
+        db_player = get_player(target_id)
+        if not db_player:
+            await interaction.followup.send(f"{user.mention} is not registered!", ephemeral=True)
+            return
+
         rank_group = None
         for role in user.roles:
             if role.name in ["iron-plat", "dia-asc", "imm-radiant"]:
@@ -221,7 +229,7 @@ class StatsCog(commands.Cog):
         embed.add_field(
             name="Rank Information",
             value=(
-                f"• Rank: {player.rank}\n"
+                f"• Rank: {db_player.rank}\n"
                 f"• Group: {rank_group_display[rank_group]}\n"
                 f"• Position: #{position}"
             ),

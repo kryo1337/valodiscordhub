@@ -72,7 +72,7 @@ async def get_player_rank(riot_id: str) -> str:
 
         except Exception as e:
             logger.error(f"Error for {riot_id}: {str(e)}")
-            return f"error: {str(e)}"
+            return None
 
         finally:
             await browser.close()

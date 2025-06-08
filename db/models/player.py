@@ -1,10 +1,11 @@
 from pydantic import BaseModel, Field, validator
+from typing import Optional
 
 
 class Player(BaseModel):
     discord_id: str
     riot_id: str
-    rank: str
+    rank: Optional[str] = None
     points: int = Field(default=1000, ge=0)
     matches_played: int = Field(default=0, ge=0)
     wins: int = Field(default=0, ge=0)

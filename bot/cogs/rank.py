@@ -6,6 +6,8 @@ import os
 
 from utils.scraper import get_player_rank
 from utils.db import get_player, create_player, update_player_rank
+from utils.rate_limit import rate_limiter
+from utils.permissions import check_player_status
 
 load_dotenv()
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
@@ -28,34 +30,57 @@ VALID_RANKS = [
     "Radiant"
 ]
 
-class RiotIDModal(discord.ui.Modal, title="Enter your Riot ID"):
+class RankModal(discord.ui.Modal, title="Enter your Riot ID"):
     riot_id = discord.ui.TextInput(
         label="Riot ID",
-        placeholder="Player#EU1",
+        placeholder="Enter your Riot ID (e.g. Player#EU1)",
         required=True,
         min_length=3,
-        max_length=32
+        max_length=20
     )
 
     async def on_submit(self, interaction: discord.Interaction):
+        user_id = str(interaction.user.id)
+        
+        is_limited, remaining = rate_limiter.is_rate_limited(user_id, "rank")
+        if is_limited:
+            await interaction.response.send_message(
+                f"Please wait {remaining} seconds before updating your rank again!",
+                ephemeral=True
+            )
+            return
+
+        allowed, reason = check_player_status(user_id)
+        if not allowed:
+            await interaction.response.send_message(reason, ephemeral=True)
+            return
+
         await interaction.response.defer(ephemeral=True)
-        riot_id = self.riot_id.value.strip()
 
         try:
-            rank = await get_player_rank(riot_id)
-            if not rank:
-                await interaction.followup.send(
-                    f"❌ Failed to fetch rank for **{riot_id}**. Please try again later.",
-                    ephemeral=True
-                )
+            rank = await get_player_rank(self.riot_id.value)
+            if not rank or "error" in rank.lower():
+                player = get_player(str(interaction.user.id))
+                if not player:
+                    player = create_player(
+                        discord_id=str(interaction.user.id),
+                        riot_id=self.riot_id.value,
+                        rank=None
+                    )
+                    await interaction.followup.send(
+                        f"✅ Player profile created!\n"
+                        f"❌ Could not fetch your rank. Make sure your Riot ID is correct and your profile is public.",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        f"❌ Could not fetch your rank. Make sure your Riot ID is correct and your profile is public.\n"
+                        f"Your registered Riot ID: **{player.riot_id}**",
+                        ephemeral=True
+                    )
                 return
 
-            if not self.is_valid_rank(rank):
-                await interaction.followup.send(
-                    f"❌ Invalid rank format for **{riot_id}**. Please try again later.",
-                    ephemeral=True
-                )
-                return
+            rate_limiter.update_cooldown(user_id, "rank")
 
             member = interaction.user
             player = get_player(str(interaction.user.id))
@@ -64,7 +89,7 @@ class RiotIDModal(discord.ui.Modal, title="Enter your Riot ID"):
             if not player:
                 player = create_player(
                     discord_id=str(interaction.user.id),
-                    riot_id=riot_id,
+                    riot_id=self.riot_id.value,
                     rank=rank
                 )
                 role_name = self.get_role_name_from_rank(rank)
@@ -72,13 +97,13 @@ class RiotIDModal(discord.ui.Modal, title="Enter your Riot ID"):
                     role_assigned = await self.assign_role(member, role_name)
 
                 await interaction.followup.send(
-                    f"**{riot_id}** has rank: **{rank}**\n"
+                    f"**{self.riot_id.value}** has rank: **{rank}**\n"
                     f"✅ Player profile created!"
                     + (f"\n✅ Assigned role: **{role_name}**" if role_assigned else ""),
                     ephemeral=True
                 )
             else:
-                if player.riot_id != riot_id:
+                if player.riot_id != self.riot_id.value:
                     await interaction.followup.send(
                         f"❌ This Riot ID is different from your registered one.\n"
                         f"Your registered Riot ID: **{player.riot_id}**",
@@ -92,7 +117,7 @@ class RiotIDModal(discord.ui.Modal, title="Enter your Riot ID"):
                     role_assigned = await self.assign_role(member, role_name)
 
                 await interaction.followup.send(
-                    f"**{riot_id}** has rank: **{rank}**\n"
+                    f"**{self.riot_id.value}** has rank: **{rank}**\n"
                     f"✅ Rank updated!"
                     + (f"\n✅ Assigned role: **{role_name}**" if role_assigned else ""),
                     ephemeral=True
@@ -150,7 +175,7 @@ class RankButton(discord.ui.Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        modal = RiotIDModal()
+        modal = RankModal()
         await interaction.response.send_modal(modal)
 
 class RankView(discord.ui.View):

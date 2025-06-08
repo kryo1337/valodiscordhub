@@ -15,6 +15,7 @@ from utils.db import (
     is_player_banned,
     is_player_timeout,
 )
+from utils.rate_limit import rate_limiter
 from .match import create_match
 
 load_dotenv()
@@ -24,7 +25,6 @@ class QueueView(discord.ui.View):
     def __init__(self, rank_group: str):
         super().__init__(timeout=None)
         self.rank_group = rank_group
-        self.last_interaction = {}
 
     @discord.ui.button(
         label="Queue",
@@ -38,15 +38,13 @@ class QueueView(discord.ui.View):
         user_id = str(interaction.user.id)
         matched_players = []
         
-        if user_id in self.last_interaction:
-            time_diff = (current_time - self.last_interaction[user_id]).total_seconds()
-            if time_diff < 5:
-                remaining_time = round(5 - time_diff)
-                await interaction.response.send_message(
-                    f"Please wait {remaining_time} seconds before joining/leaving the queue again!",
-                    ephemeral=True
-                )
-                return
+        is_limited, remaining = rate_limiter.is_rate_limited(user_id, "queue")
+        if is_limited:
+            await interaction.response.send_message(
+                f"Please wait {remaining} seconds before joining/leaving the queue again!",
+                ephemeral=True
+            )
+            return
 
         try:
             player = get_player(user_id)
@@ -61,6 +59,8 @@ class QueueView(discord.ui.View):
                 "You need to register first using `/rank` command!", ephemeral=True
             )
             return
+
+        rate_limiter.update_cooldown(user_id, "queue")
 
         if is_player_banned(user_id):
             ban_log = db.admin_logs.find_one({"action": "ban", "target_discord_id": user_id})
@@ -118,8 +118,6 @@ class QueueView(discord.ui.View):
                     f"An error occurred while joining the queue: {str(e)}", ephemeral=True
                 )
                 return
-
-        self.last_interaction[user_id] = current_time
 
         if len(queue.players) >= 10:
             matched_players = queue.players[:10]

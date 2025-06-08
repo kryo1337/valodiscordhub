@@ -83,7 +83,7 @@ class TeamSelectionView(discord.ui.View):
                 options=[
                     discord.SelectOption(
                         label=f"Player {i + 1}",
-                        value=p.discord_id,
+                        value=message.guild.get_member(int(p.discord_id)).display_name if p.discord_id.isdigit() else p.discord_id,
                         description=f"<@{p.discord_id}>",
                     )
                     for i, p in enumerate(available_players)
