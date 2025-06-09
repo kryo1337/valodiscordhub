@@ -116,13 +116,6 @@ class AdminCog(commands.Cog):
 
         update_leaderboard(rank_group, updated_entries)
 
-        stats_cog = self.bot.get_cog("StatsCog")
-        if stats_cog:
-            for channel_id in stats_cog.stats_channels:
-                channel = self.bot.get_channel(channel_id)
-                if channel:
-                    await stats_cog.update_player_stats(channel, all_match_players)
-
         history_cog = self.bot.get_cog("HistoryCog")
         if history_cog:
             await history_cog.add_match_to_history(match)
@@ -253,13 +246,6 @@ class AdminCog(commands.Cog):
                 updated_entries.append(entry)
 
         update_leaderboard(rank_group, updated_entries)
-
-        stats_cog = self.bot.get_cog("StatsCog")
-        if stats_cog:
-            for channel_id in stats_cog.stats_channels:
-                channel = self.bot.get_channel(channel_id)
-                if channel:
-                    await stats_cog.update_player_stats(channel, all_match_players)
 
         history_cog = self.bot.get_cog("HistoryCog")
         if history_cog:
@@ -504,8 +490,7 @@ class AdminCog(commands.Cog):
                 await interaction.followup.send(f"❌ {user.mention} is not registered!", ephemeral=True)
                 return
 
-            player.rank = rank
-            update_player(player)
+            update_player_rank(str(user.id), rank)
 
             leaderboard = get_leaderboard(rank_group)
             if leaderboard:
@@ -514,13 +499,6 @@ class AdminCog(commands.Cog):
                         entry.rank = rank
                         break
                 update_leaderboard(rank_group, leaderboard.players)
-
-            stats_cog = interaction.client.get_cog("StatsCog")
-            if stats_cog:
-                for channel_id in stats_cog.stats_channels:
-                    channel = interaction.client.get_channel(channel_id)
-                    if channel:
-                        await stats_cog.update_player_stats(channel, [str(user.id)])
 
             leaderboard_cog = interaction.client.get_cog("LeaderboardCog")
             if leaderboard_cog:

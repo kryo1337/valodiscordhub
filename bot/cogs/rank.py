@@ -254,10 +254,31 @@ class Rank(commands.Cog):
             if not category:
                 category = await interaction.guild.create_category("valohub")
 
+            overwrites = {
+                interaction.guild.default_role: discord.PermissionOverwrite(
+                    view_channel=False,
+                    send_messages=False
+                ),
+                interaction.guild.me: discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    manage_channels=True
+                ),
+            }
+
+            for role_name in ["iron-plat", "dia-asc", "imm-radiant"]:
+                role = discord.utils.get(interaction.guild.roles, name=role_name)
+                if role:
+                    overwrites[role] = discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=False
+                    )
+
             channel = await interaction.guild.create_text_channel(
                 name="rank",
                 category=category,
                 topic="Get your Valorant rank here!",
+                overwrites=overwrites,
                 reason="Auto-created for rank setup"
             )
 

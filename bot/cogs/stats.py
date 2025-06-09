@@ -51,7 +51,7 @@ class StatsCog(commands.Cog):
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(
                 view_channel=False,
-                send_messages=False
+                send_messages=True
             ),
             interaction.guild.me: discord.PermissionOverwrite(
                 view_channel=True,
@@ -65,7 +65,7 @@ class StatsCog(commands.Cog):
             if role:
                 overwrites[role] = discord.PermissionOverwrite(
                     view_channel=True,
-                    send_messages=False
+                    send_messages=True
                 )
 
         channel = await category.create_text_channel(
@@ -81,125 +81,42 @@ class StatsCog(commands.Cog):
         await channel.purge()
         self.last_update = datetime.now(timezone.utc)
 
-        guild = channel.guild
-        all_players = []
-        
-        for rank_group in ["iron-plat", "dia-asc", "imm-radiant"]:
-            players = get_leaderboard_page(rank_group, 1, 1000)
-            all_players.extend(players)
-
-        sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
-        
-        has_players = False
-        for player in sorted_players:
-            try:
-                discord_user = await guild.fetch_member(int(player.discord_id))
-                if not discord_user:
-                    continue
-
-                rank_group = None
-                for role in discord_user.roles:
-                    if role.name in ["iron-plat", "dia-asc", "imm-radiant"]:
-                        rank_group = role.name
-                        break
-
-                if not rank_group:
-                    continue
-
-                position = None
-                for i, p in enumerate(sorted_players, start=1):
-                    if p.discord_id == player.discord_id:
-                        position = i
-                        break
-
-                db_player = get_player(player.discord_id)
-                if not db_player:
-                    continue
-
-                embed = discord.Embed(
-                    title=f"Player Statistics - {discord_user.display_name}",
-                    color=discord.Color.dark_theme()
-                )
-                
-                rank_group_display = {
-                    "iron-plat": "Iron - Platinum",
-                    "dia-asc": "Diamond - Ascendant",
-                    "imm-radiant": "Immortal - Radiant"
-                }
-                
-                streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
-                embed.add_field(
-                    name="Rank Information",
-                    value=(
-                        f"• Rank: {db_player.rank}\n"
-                        f"• Group: {rank_group_display[rank_group]}\n"
-                        f"• Position: #{position}"
-                    ),
-                    inline=False
-                )
-                
-                embed.add_field(
-                    name="📊 Statistics",
-                    value=(
-                        f"• Points: {player.points}\n"
-                        f"• Matches: {player.matches_played}\n"
-                        f"• Wins: {int(player.matches_played * player.winrate / 100)}\n"
-                        f"• Losses: {int(player.matches_played * (100 - player.winrate) / 100)}\n"
-                        f"• Winrate: {player.winrate}%\n"
-                        f"{streak_text}"
-                    ),
-                    inline=False
-                )
-                
-                if position > 1:
-                    points_to_next = sorted_players[position-2].points - player.points
-                    embed.add_field(
-                        name="📈 Progress",
-                        value=f"Need {points_to_next} more points to reach position #{position-1}",
-                        inline=False
-                    )
-                
-                await channel.send(embed=embed, allowed_mentions=[discord.AllowedMentions(users=[discord_user])])
-                has_players = True
-            except Exception as e:
-                print(f"Error updating stats for player {player.discord_id}: {e}")
-
-        if not has_players:
-            embed = discord.Embed(
-                title="No Stats Yet",
-                description="Players who haven't played any matches will appear here once they start playing!",
-                color=discord.Color.dark_theme()
-            )
-            await channel.send(embed=embed)
+        embed = discord.Embed(
+            title="Player Statistics",
+            description="Use `/stats` to view your own statistics or `/stats @user` to view another player's statistics.",
+            color=discord.Color.dark_theme()
+        )
+        await channel.send(embed=embed)
 
     @app_commands.command(name="stats", description="Display player statistics")
     @app_commands.guilds(discord.Object(id=GUILD_ID))
     async def stats(
         self,
         interaction: discord.Interaction,
-        user: discord.Member
+        user: discord.Member = None
     ):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         
-        target_id = str(user.id)
+        target_user = user or interaction.user
+        target_id = str(target_user.id)
         db_player = get_player(target_id)
         if not db_player:
-            await interaction.followup.send(f"{user.mention} is not registered!", ephemeral=True)
+            await interaction.followup.send(f"{target_user.mention} is not registered!", ephemeral=True)
             return
 
         rank_group = None
-        for role in user.roles:
+        for role in target_user.roles:
             if role.name in ["iron-plat", "dia-asc", "imm-radiant"]:
                 rank_group = role.name
                 break
 
         if not rank_group:
-            await interaction.followup.send(f"{user.mention} doesn't have a valid rank group role!", ephemeral=True)
+            await interaction.followup.send(f"{target_user.mention} doesn't have a valid rank group role!", ephemeral=True)
             return
 
         player = get_player_rank(rank_group, target_id)
         if not player:
-            await interaction.followup.send(f"{user.mention} hasn't played any matches yet!", ephemeral=True)
+            await interaction.followup.send(f"{target_user.mention} hasn't played any matches yet!", ephemeral=True)
             return
 
         all_players = get_leaderboard_page(rank_group, 1, 1000)
@@ -212,7 +129,7 @@ class StatsCog(commands.Cog):
                 break
 
         embed = discord.Embed(
-            title=f"Player Statistics - {user.display_name}",
+            title=f"Player Statistics - {target_user.display_name}",
             color=discord.Color.dark_theme()
         )
         
@@ -240,21 +157,13 @@ class StatsCog(commands.Cog):
                 f"• Matches: {player.matches_played}\n"
                 f"• Wins: {int(player.matches_played * player.winrate / 100)}\n"
                 f"• Losses: {int(player.matches_played * (100 - player.winrate) / 100)}\n"
-                f"• Winrate: {player.winrate}%\n"
+                f"• Winrate: {player.winrate:.2f}%\n"
                 f"{streak_text}"
             ),
             inline=False
         )
         
-        if position > 1:
-            points_to_next = sorted_players[position-2].points - player.points
-            embed.add_field(
-                name="📈 Progress",
-                value=f"Need {points_to_next} more points to reach position #{position-1}",
-                inline=False
-            )
-        
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     async def update_player_stats(self, channel: discord.TextChannel, player_ids: List[str]):
         guild = channel.guild
@@ -344,13 +253,6 @@ class StatsCog(commands.Cog):
                     inline=False    
                 )
                 
-                if position > 1:
-                    points_to_next = sorted_players[position-2].points - player.points
-                    embed.add_field(
-                        name="📈 Progress",
-                        value=f"Need {points_to_next} more points to reach position #{position-1}",
-                        inline=False
-                    )
                 
                 if discord_user.display_name in player_messages:
                     await player_messages[discord_user.display_name].edit(embed=embed)

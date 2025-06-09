@@ -678,13 +678,6 @@ class ScoreSubmissionView(discord.ui.View):
 
         update_leaderboard(rank_group, updated_entries)
 
-        stats_cog = interaction.client.get_cog("StatsCog")
-        if stats_cog:
-            for channel_id in stats_cog.stats_channels:
-                channel = interaction.client.get_channel(channel_id)
-                if channel:
-                    await stats_cog.update_player_stats(channel, all_match_players)
-
         history_cog = interaction.client.get_cog("HistoryCog")
         if history_cog:
             await history_cog.add_match_to_history(match)
@@ -823,8 +816,6 @@ class ScoreModal(discord.ui.Modal):
             else:
                 self.view.blue_score = (opponent_score, team_score)
 
-            await self.view.check_scores(interaction)
-            
             team_name = "🔴 Red Team" if self.team == "red" else "🔵 Blue Team"
             embed = discord.Embed(
                 title="Score Submitted",
@@ -832,6 +823,8 @@ class ScoreModal(discord.ui.Modal):
                 color=discord.Color.green()
             )
             await interaction.response.send_message(embed=embed)
+            
+            await self.view.check_scores(interaction)
         except ValueError:
             embed = discord.Embed(
                 title="Invalid Input",

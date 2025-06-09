@@ -414,17 +414,21 @@ class QueueCog(commands.Cog):
         for rank_group in rank_groups:
             overwrites = {
                 interaction.guild.default_role: discord.PermissionOverwrite(
-                    view_channel=False
+                    view_channel=False,
+                    send_messages=False
                 ),
                 interaction.guild.me: discord.PermissionOverwrite(
-                    view_channel=True, send_messages=True, manage_channels=True
+                    view_channel=True,
+                    send_messages=True,
+                    manage_channels=True
                 ),
             }
 
             role = discord.utils.get(interaction.guild.roles, name=rank_group)
             if role:
                 overwrites[role] = discord.PermissionOverwrite(
-                    view_channel=True, send_messages=True
+                    view_channel=True,
+                    send_messages=False
                 )
 
             channel = await category.create_text_channel(
@@ -433,13 +437,43 @@ class QueueCog(commands.Cog):
 
             queue = get_queue(rank_group) or Queue(rank_group=rank_group, players=[])
             view = QueueView(rank_group)
-            await channel.send(
-                content=f"**{rank_group.upper()} Queue**\n"
-                        f"Click the button to join/leave the queue!\n"
-                        f"Current players in queue: {len(queue.players)}\n"
-                        f"Players: {', '.join([f'<@{p.discord_id}>' for p in queue.players]) if queue.players else 'None'}",
-                view=view,
+            
+            rank_group_colors = {
+                "iron-plat": discord.Color.blue(),
+                "dia-asc": discord.Color.green(),
+                "imm-radiant": discord.Color.red()
+            }
+            
+            embed = discord.Embed(
+                title=f"{rank_group.upper()} Queue",
+                color=rank_group_colors[rank_group]
             )
+            
+            progress = min(len(queue.players) * 10, 100)
+            progress_bar = "▰" * (progress // 10) + "▱" * ((100 - progress) // 10)
+            embed.add_field(
+                name="Queue Status",
+                value=f"`{progress_bar}` {len(queue.players)}/10",
+                inline=False
+            )
+            
+            if queue.players:
+                players_list = "\n".join([f"• <@{p.discord_id}>" for p in queue.players])
+                embed.add_field(
+                    name="Players",
+                    value=players_list,
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="Players",
+                    value="Queue is empty",
+                    inline=False
+                )
+            
+            embed.set_footer(text="Click the button below to join/leave the queue")
+            
+            await channel.send(embed=embed, view=view)
 
         await interaction.followup.send(
             "✅ Queue channels have been set up!", ephemeral=True
