@@ -228,19 +228,16 @@ class RankGroupSelect(discord.ui.Select):
                 label="Iron - Platinum",
                 value="iron-plat",
                 description="View Iron to Platinum leaderboard",
-                emoji="🥉"
             ),
             discord.SelectOption(
                 label="Diamond - Ascendant",
                 value="dia-asc",
                 description="View Diamond to Ascendant leaderboard",
-                emoji="💎"
             ),
             discord.SelectOption(
                 label="Immortal - Radiant",
                 value="imm-radiant",
                 description="View Immortal to Radiant leaderboard",
-                emoji="🔥"
             )
         ]
         super().__init__(

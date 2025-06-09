@@ -102,6 +102,9 @@ class HistoryCog(commands.Cog):
                 "dia-asc": "Diamond - Ascendant",
                 "imm-radiant": "Immortal - Radiant"
             }
+
+            red_side = "⚔️ Attack" if match.defense_start == "blue" else "🛡️ Defense"
+            blue_side = "⚔️ Attack" if match.defense_start == "red" else "🛡️ Defense"
             
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
@@ -111,12 +114,12 @@ class HistoryCog(commands.Cog):
             )
             
             embed.add_field(
-                name="🔴 Red Team",
+                name=f"🔴 Red Team {red_side}",
                 value=f"• Captain: <@{match.players_red[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_red[1:]]),
                 inline=True
             )
             embed.add_field(
-                name="🔵 Blue Team",
+                name=f"🔵 Blue Team {blue_side}",
                 value=f"• Captain: <@{match.players_blue[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_blue[1:]]),
                 inline=True
             )
@@ -161,6 +164,9 @@ class HistoryCog(commands.Cog):
                 "dia-asc": "Diamond - Ascendant",
                 "imm-radiant": "Immortal - Radiant"
             }
+
+            red_side = "⚔️ Attack" if match.defense_start == "blue" else "🛡️ Defense"
+            blue_side = "⚔️ Attack" if match.defense_start == "red" else "🛡️ Defense"
             
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
@@ -170,12 +176,12 @@ class HistoryCog(commands.Cog):
             )
             
             embed.add_field(
-                name="🔴 Red Team",
+                name=f"🔴 Red Team {red_side}",
                 value=f"• Captain: <@{match.players_red[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_red[1:]]),
                 inline=True
             )
             embed.add_field(
-                name="🔵 Blue Team",
+                name=f"🔵 Blue Team {blue_side}",
                 value=f"• Captain: <@{match.players_blue[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_blue[1:]]),
                 inline=True
             )
@@ -231,13 +237,16 @@ class HistoryCog(commands.Cog):
                 "dia-asc": "Diamond - Ascendant",
                 "imm-radiant": "Immortal - Radiant"
             }
+
+            red_side = "⚔️ Attack" if match.defense_start == "blue" else "🛡️ Defense"
+            blue_side = "⚔️ Attack" if match.defense_start == "red" else "🛡️ Defense"
             
             embed.add_field(
                 name=f"Match {match.match_id}",
                 value=(
                     f"**Rank Group: {rank_group_display[match.rank_group]}**\n"
-                    f"🔴 {red_team_str}\n"
-                    f"🔵 {blue_team_str}\n"
+                    f"🔴 Red Team {red_side}\n{red_team_str}\n"
+                    f"🔵 Blue Team {blue_side}\n{blue_team_str}\n"
                     f"Score: {match.red_score}-{match.blue_score}\n"
                     f"Created: {match.created_at.strftime('%Y-%m-%d %H:%M')}\n"
                     f"Duration: {duration_str}"
@@ -278,6 +287,9 @@ class HistoryCog(commands.Cog):
                 "dia-asc": "Diamond - Ascendant",
                 "imm-radiant": "Immortal - Radiant"
             }
+
+            red_side = "⚔️ Attack" if match.defense_start == "blue" else "🛡️ Defense"
+            blue_side = "⚔️ Attack" if match.defense_start == "red" else "🛡️ Defense"
             
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
@@ -287,12 +299,12 @@ class HistoryCog(commands.Cog):
             )
             
             embed.add_field(
-                name="🔴 Red Team",
+                name=f"🔴 Red Team {red_side}",
                 value=f"• Captain: <@{match.players_red[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_red[1:]]),
                 inline=True
             )
             embed.add_field(
-                name="🔵 Blue Team",
+                name=f"🔵 Blue Team {blue_side}",
                 value=f"• Captain: <@{match.players_blue[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_blue[1:]]),
                 inline=True
             )

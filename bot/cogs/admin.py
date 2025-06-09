@@ -5,7 +5,7 @@ from typing import Optional, Literal
 import os
 import asyncio
 from dotenv import load_dotenv
-from utils.db import get_match, update_match_result, get_active_matches, get_leaderboard, update_leaderboard, get_player, add_admin_log, remove_admin_log, is_player_banned, is_player_timeout, get_queue, remove_player_from_queue, update_player_rank
+from utils.db import get_match, update_match_result, get_active_matches, get_leaderboard, update_leaderboard, get_player, add_admin_log, remove_admin_log, is_player_banned, is_player_timeout, get_queue, remove_player_from_queue, update_player_rank, get_banned_players, get_timeout_players
 from db.models.leaderboard import LeaderboardEntry
 from .leaderboard import LeaderboardCog
 
@@ -611,6 +611,60 @@ class AdminCog(commands.Cog):
                 f"❌ Failed to refresh channels: {str(e)}",
                 ephemeral=True
             )
+
+    @app_commands.command(name="list_bans")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def list_bans(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        banned_players = get_banned_players()
+        if not banned_players:
+            await interaction.followup.send("No banned players found.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="🔨 Banned Players",
+            color=discord.Color.red()
+        )
+
+        for ban in banned_players:
+            user = interaction.guild.get_member(int(ban["target_discord_id"]))
+            if user:
+                embed.add_field(
+                    name=f"{user.display_name}",
+                    value=f"Reason: {ban['reason']}\nBanned at: <t:{int(ban['timestamp'].timestamp())}:R>",
+                    inline=False
+                )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="list_timeouts")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def list_timeouts(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        timeout_players = get_timeout_players()
+        if not timeout_players:
+            await interaction.followup.send("No timed out players found.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="⏰ Timed Out Players",
+            color=discord.Color.orange()
+        )
+
+        for timeout in timeout_players:
+            user = interaction.guild.get_member(int(timeout["target_discord_id"]))
+            if user:
+                embed.add_field(
+                    name=f"{user.display_name}",
+                    value=f"Reason: {timeout['reason']}\nDuration: {timeout['duration_minutes']} minutes\nTimed out at: <t:{int(timeout['timestamp'].timestamp())}:R>",
+                    inline=False
+                )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 class AdminReportView(discord.ui.View):
     def __init__(self):

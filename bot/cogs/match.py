@@ -82,8 +82,8 @@ class TeamSelectionView(discord.ui.View):
                 placeholder="Select a player",
                 options=[
                     discord.SelectOption(
-                        label=f"Player {i + 1}",
-                        value=message.guild.get_member(int(p.discord_id)).display_name if p.discord_id.isdigit() else p.discord_id,
+                        label=message.guild.get_member(int(p.discord_id)).display_name if p.discord_id.isdigit() else p.discord_id,
+                        value=p.discord_id,
                         description=f"<@{p.discord_id}>",
                     )
                     for i, p in enumerate(available_players)
@@ -158,9 +158,11 @@ class TeamSelectionView(discord.ui.View):
 
         selected_player = random.choice(available_players)
         if self.current_captain_index == 0:
-            self.red_team.append(selected_player.discord_id)
+            if selected_player.discord_id not in self.red_team and selected_player.discord_id not in self.blue_team:
+                self.red_team.append(selected_player.discord_id)
         else:
-            self.blue_team.append(selected_player.discord_id)
+            if selected_player.discord_id not in self.red_team and selected_player.discord_id not in self.blue_team:
+                self.blue_team.append(selected_player.discord_id)
 
         self.current_selection_index += 1
         self.last_picker = self.current_captain_index
@@ -192,10 +194,13 @@ class TeamSelectionView(discord.ui.View):
             guild.default_role: discord.PermissionOverwrite(connect=False),
             guild.me: discord.PermissionOverwrite(connect=True, manage_channels=True),
         }
-        # for member_id in self.red_team:
-        #     member = guild.get_member(int(member_id))
-        #     if member:
-        #         overwrites[member] = discord.PermissionOverwrite(connect=True)
+        for member_id in self.red_team:
+            try:
+                member = guild.get_member(int(member_id))
+                if member:
+                    overwrites[member] = discord.PermissionOverwrite(connect=True)
+            except (ValueError, TypeError):
+                print(f"Could not get member for ID: {member_id}")
 
         red_vc = await guild.create_voice_channel(
             name="Red Team",
@@ -208,10 +213,13 @@ class TeamSelectionView(discord.ui.View):
             guild.default_role: discord.PermissionOverwrite(connect=False),
             guild.me: discord.PermissionOverwrite(connect=True, manage_channels=True),
         }
-        # for member_id in self.blue_team:
-        #     member = guild.get_member(int(member_id))
-        #     if member:
-        #         overwrites[member] = discord.PermissionOverwrite(connect=True)
+        for member_id in self.blue_team:
+            try:
+                member = guild.get_member(int(member_id))
+                if member:
+                    overwrites[member] = discord.PermissionOverwrite(connect=True)
+            except (ValueError, TypeError):
+                print(f"Could not get member for ID: {member_id}")
 
         blue_vc = await guild.create_voice_channel(
             name="Blue Team",
@@ -285,17 +293,17 @@ class SideSelectionView(discord.ui.View):
             color=discord.Color.dark_theme()
         )
 
-        red_status = f" ({self.red_side.title()})" if self.red_side else ""
-        blue_status = f" ({self.blue_side.title()})" if self.blue_side else ""
+        red_status = f"⚔️ Attack" if self.red_side == "attack" else f"🛡️ Defense"
+        blue_status = f"⚔️ Attack" if self.blue_side == "attack" else f"🛡️ Defense"
         
         embed.add_field(
-            name=f"🔴 Red Team{red_status}",
-            value=f"• Captain: <@{self.red_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.red_team[1:]]) + red_status,
+            name=f"🔴 Red Team {red_status}",
+            value=f"• Captain: <@{self.red_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.red_team[1:]]),
             inline=True
         )
         embed.add_field(
-            name=f"🔵 Blue Team{blue_status}",
-            value=f"• Captain: <@{self.blue_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.blue_team[1:]]) + blue_status,
+            name=f"🔵 Blue Team {blue_status}",
+            value=f"• Captain: <@{self.blue_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.blue_team[1:]]),
             inline=True
         )
         
@@ -376,14 +384,17 @@ class SideSelectionView(discord.ui.View):
                 color=discord.Color.dark_theme()
             )
 
+            red_status = f"⚔️ Attack" if self.red_side == "attack" else f"🛡️ Defense"
+            blue_status = f"⚔️ Attack" if self.blue_side == "attack" else f"🛡️ Defense"
+
             embed.add_field(
-                name="🔴 Red Team",
-                value=f"• Captain: <@{self.red_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.red_team[1:]]) + f"\n({self.red_side.title()})",
+                name=f"🔴 Red Team {red_status}",
+                value=f"• Captain: <@{self.red_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.red_team[1:]]),
                 inline=True
             )
             embed.add_field(
-                name="🔵 Blue Team",
-                value=f"• Captain: <@{self.blue_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.blue_team[1:]]) + f"\n({self.blue_side.title()})",
+                name=f"🔵 Blue Team {blue_status}",
+                value=f"• Captain: <@{self.blue_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.blue_team[1:]]),
                 inline=True
             )
 
@@ -839,8 +850,22 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
 
     match_channel = await match_category.create_text_channel(name="Match")
 
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(connect=False),
+        guild.me: discord.PermissionOverwrite(connect=True, manage_channels=True),
+    }
+    for player in players:
+        try:
+            member = guild.get_member(int(player.discord_id))
+            if member:
+                overwrites[member] = discord.PermissionOverwrite(connect=True)
+        except (ValueError, TypeError):
+            print(f"Could not get member for ID: {player.discord_id}")
+
     match_vc = await match_category.create_voice_channel(
-        name="Lobby", user_limit=10
+        name="Lobby",
+        user_limit=10,
+        overwrites=overwrites
     )
     
     leaderboard = get_leaderboard(rank_group)

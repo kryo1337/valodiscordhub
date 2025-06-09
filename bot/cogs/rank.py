@@ -251,7 +251,11 @@ class Rank(commands.Cog):
 
         try:
             category = discord.utils.get(interaction.guild.categories, name="valohub")
-            if not category:
+            if category:
+                existing_channel = discord.utils.get(category.channels, name="rank")
+                if existing_channel:
+                    await existing_channel.delete()
+            else:
                 category = await interaction.guild.create_category("valohub")
 
             overwrites = {

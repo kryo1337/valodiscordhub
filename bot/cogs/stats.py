@@ -42,9 +42,9 @@ class StatsCog(commands.Cog):
 
         category = discord.utils.get(interaction.guild.categories, name="valohub")
         if category:
-            for channel in category.channels:
-                if channel.name == "stats":
-                    await channel.delete()
+            existing_channel = discord.utils.get(category.channels, name="stats")
+            if existing_channel:
+                await existing_channel.delete()
         else:
             category = await interaction.guild.create_category("valohub")
 
