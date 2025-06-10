@@ -26,108 +26,8 @@ class QueueView(discord.ui.View):
         super().__init__(timeout=None)
         self.rank_group = rank_group
 
-    @discord.ui.button(
-        label="Queue",
-        style=discord.ButtonStyle.grey,
-        custom_id="join_button",
-    )
-    async def join_button(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        current_time = datetime.now()
-        user_id = str(interaction.user.id)
-        matched_players = []
-        
-        is_limited, remaining = rate_limiter.is_rate_limited(user_id, "queue")
-        if is_limited:
-            await interaction.response.send_message(
-                f"Please wait {remaining} seconds before joining/leaving the queue again!",
-                ephemeral=True
-            )
-            return
-
+    async def update_queue_display(self, channel: discord.TextChannel, queue: Queue):
         try:
-            player = get_player(user_id)
-        except Exception as e:
-            await interaction.response.send_message(
-                f"An error occurred while checking your registration: {str(e)}", ephemeral=True
-            )
-            return
-
-        if not player:
-            await interaction.response.send_message(
-                "You need to register first using `/rank` command!", ephemeral=True
-            )
-            return
-
-        rate_limiter.update_cooldown(user_id, "queue")
-
-        if is_player_banned(user_id):
-            ban_log = db.admin_logs.find_one({"action": "ban", "target_discord_id": user_id})
-            reason = ban_log["reason"] if ban_log else "No reason provided"
-            await interaction.response.send_message(
-                f"❌ You are banned from the queue system!\nReason: {reason}",
-                ephemeral=True
-            )
-            return
-
-        if is_player_timeout(user_id):
-            timeout_log = db.admin_logs.find_one({"action": "timeout", "target_discord_id": user_id})
-            if timeout_log:
-                timeout_time = timeout_log["timestamp"]
-                duration = timeout_log["duration_minutes"]
-                current_time = datetime.now(timezone.utc)
-                time_diff = (current_time - timeout_time).total_seconds() / 60
-                remaining_time = int(duration - time_diff)
-                reason = timeout_log["reason"] if "reason" in timeout_log else "No reason provided"
-                await interaction.response.send_message(
-                    f"⏰ You are in timeout for {remaining_time} more minutes!\nReason: {reason}",
-                    ephemeral=True
-                )
-                return
-
-        try:
-            queue = get_queue(self.rank_group)
-        except Exception as e:
-            await interaction.response.send_message(
-                f"An error occurred while accessing the queue: {str(e)}", ephemeral=True
-            )
-            return
-
-        player_in_queue = any(p.discord_id == user_id for p in queue.players)
-
-        if player_in_queue:
-            try:
-                queue = remove_player_from_queue(self.rank_group, user_id)
-                await interaction.response.send_message(
-                    "You have left the queue!", ephemeral=True
-                )
-            except Exception as e:
-                await interaction.response.send_message(
-                    f"An error occurred while leaving the queue: {str(e)}", ephemeral=True
-                )
-                return
-        else:
-            try:
-                queue = add_to_queue(self.rank_group, user_id)
-                await interaction.response.send_message(
-                    "You have joined the queue!", ephemeral=True
-                )
-            except Exception as e:
-                await interaction.response.send_message(
-                    f"An error occurred while joining the queue: {str(e)}", ephemeral=True
-                )
-                return
-
-        if len(queue.players) >= 10:
-            matched_players = queue.players[:10]
-            for player in matched_players:
-                queue = remove_player_from_queue(self.rank_group, player.discord_id)
-
-        queue = get_queue(self.rank_group)
-
-        try:
-            channel = interaction.channel
             async for message in channel.history(limit=1):
                 rank_group_colors = {
                     "iron-plat": discord.Color.blue(),
@@ -167,10 +67,100 @@ class QueueView(discord.ui.View):
                 await message.edit(embed=embed, view=self)
                 break
         except Exception as e:
-            await interaction.channel.send(f"Error updating queue message: {str(e)}")
+            print(f"Error updating queue display: {str(e)}")
 
-        if matched_players:
-            await create_match(interaction.guild, self.rank_group, matched_players)
+    @discord.ui.button(
+        label="Queue",
+        style=discord.ButtonStyle.grey,
+        custom_id="join_button",
+    )
+    async def join_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        current_time = datetime.now(timezone.utc)
+        user_id = str(interaction.user.id)
+        matched_players = []
+        
+        is_limited, remaining = rate_limiter.is_rate_limited(user_id, "queue")
+        if is_limited:
+            await interaction.response.send_message(
+                f"Please wait {remaining} seconds before joining/leaving the queue again!",
+                ephemeral=True
+            )
+            return
+
+        try:
+            player = get_player(user_id)
+            if not player:
+                await interaction.response.send_message(
+                    "You need to register first using `/rank` command!", ephemeral=True
+                )
+                return
+
+            rate_limiter.update_cooldown(user_id, "queue")
+
+            queue = get_queue(self.rank_group)
+            player_in_queue = any(p.discord_id == user_id for p in queue.players)
+
+            if player_in_queue:
+                try:
+                    queue = remove_player_from_queue(self.rank_group, user_id)
+                    await interaction.response.send_message(
+                        "You have left the queue!", ephemeral=True
+                    )
+                except ValueError as e:
+                    await interaction.response.send_message(
+                        f"❌ {str(e)}",
+                        ephemeral=True
+                    )
+                    return
+                except Exception as e:
+                    print(f"Error leaving queue: {str(e)}")
+                    await interaction.response.send_message(
+                        f"An error occurred while leaving the queue: {str(e)}",
+                        ephemeral=True
+                    )
+                    return
+            else:
+                try:
+                    queue = add_to_queue(self.rank_group, user_id)
+                    await interaction.response.send_message(
+                        "You have joined the queue!", ephemeral=True
+                    )
+                except ValueError as e:
+                    await interaction.response.send_message(
+                        f"❌ {str(e)}",
+                        ephemeral=True
+                    )
+                    return
+                except Exception as e:
+                    print(f"Error joining queue: {str(e)}")
+                    await interaction.response.send_message(
+                        f"An error occurred while joining the queue: {str(e)}",
+                        ephemeral=True
+                    )
+                    return
+
+            if len(queue.players) >= 10:
+                matched_players = queue.players[:10]
+                for player in matched_players:
+                    try:
+                        queue = remove_player_from_queue(self.rank_group, player.discord_id)
+                    except Exception as e:
+                        print(f"Error removing matched player from queue: {str(e)}")
+
+            queue = get_queue(self.rank_group)
+            await self.update_queue_display(interaction.channel, queue)
+
+            if matched_players:
+                await create_match(interaction.guild, self.rank_group, matched_players)
+
+        except Exception as e:
+            print(f"Error in queue button: {str(e)}")
+            await interaction.response.send_message(
+                f"An error occurred: {str(e)}",
+                ephemeral=True
+            )
 
 class QueueCog(commands.Cog):
     def __init__(self, bot):
@@ -183,7 +173,7 @@ class QueueCog(commands.Cog):
 
     @tasks.loop(minutes=5)
     async def check_queue_timeout(self):
-        current_time = datetime.now()
+        current_time = datetime.now(timezone.utc)
         rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
         
         for rank_group in rank_groups:
@@ -478,6 +468,17 @@ class QueueCog(commands.Cog):
         await interaction.followup.send(
             "✅ Queue channels have been set up!", ephemeral=True
         )
+
+    async def remove_player_from_all_queues(self, guild: discord.Guild, discord_id: str):
+        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
+        for rank_group in rank_groups:
+            try:
+                queue = get_queue(rank_group)
+                if queue and any(p.discord_id == discord_id for p in queue.players):
+                    queue = remove_player_from_queue(rank_group, discord_id)
+                    await self.update_queue_display(interaction.channel, queue)
+            except Exception as e:
+                print(f"Error removing player from queue {rank_group}: {e}")
 
 async def setup(bot):
     cog = QueueCog(bot)

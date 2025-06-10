@@ -5,12 +5,15 @@ from db.models.player import Player
 from db.models.queue import Queue, QueueEntry
 from db.models.match import Match
 from db.models.leaderboard import Leaderboard, LeaderboardEntry
+from db.models.preferences import UserPreferences
 from datetime import datetime, timezone
 
 MONGO_URI = os.getenv("MONGODB_URI")
 
 client = MongoClient(MONGO_URI)
 db = client.valodiscordhub
+
+db.user_preferences.create_index("discord_id", unique=True)
 
 def get_player(discord_id: str) -> Optional[Player]:
     player_data = db.players.find_one({"discord_id": discord_id})
@@ -40,10 +43,22 @@ def update_player_rank(discord_id: str, rank: str) -> Optional[Player]:
 def get_queue(rank_group: str) -> Queue:
     queue_data = db.queues.find_one({"rank_group": rank_group})
     if queue_data:
-        return Queue(**queue_data)
+        queue = Queue(**queue_data)
+        original_count = len(queue.players)
+        queue.players = [
+            p for p in queue.players 
+            if not is_player_banned(p.discord_id) and not is_player_timeout(p.discord_id)
+        ]
+        if len(queue.players) != original_count:
+            update_queue(rank_group, queue.players)
+        return queue
     return Queue(rank_group=rank_group)
 
 def update_queue(rank_group: str, players: List[QueueEntry]) -> Queue:
+    players = [
+        p for p in players 
+        if not is_player_banned(p.discord_id) and not is_player_timeout(p.discord_id)
+    ]
     queue = Queue(rank_group=rank_group, players=players)
     db.queues.update_one(
         {"rank_group": rank_group},
@@ -53,12 +68,21 @@ def update_queue(rank_group: str, players: List[QueueEntry]) -> Queue:
     return queue
 
 def add_to_queue(rank_group: str, discord_id: str) -> Queue:
+    if is_player_banned(discord_id):
+        raise ValueError("You are banned from the queue system")
+    if is_player_timeout(discord_id):
+        raise ValueError("You are in timeout and cannot join the queue")
+        
     queue = get_queue(rank_group)
+    if any(p.discord_id == discord_id for p in queue.players):
+        raise ValueError("You are already in the queue")
     queue.players.append(QueueEntry(discord_id=discord_id))
     return update_queue(rank_group, queue.players)
 
 def remove_player_from_queue(rank_group: str, discord_id: str) -> Queue:
     queue = get_queue(rank_group)
+    if not any(p.discord_id == discord_id for p in queue.players):
+        raise ValueError("You are not in the queue")
     queue.players = [p for p in queue.players if p.discord_id != discord_id]
     return update_queue(rank_group, queue.players)
 
@@ -206,6 +230,8 @@ def is_player_timeout(discord_id: str) -> bool:
         return False
     
     timeout_time = timeout["timestamp"]
+    if timeout_time.tzinfo is None:
+        timeout_time = timeout_time.replace(tzinfo=timezone.utc)
     duration = timeout["duration_minutes"]
     current_time = datetime.now(timezone.utc)
     time_diff = (current_time - timeout_time).total_seconds() / 60
@@ -230,3 +256,16 @@ def remove_admin_log(action: str, target_discord_id: str) -> None:
     db.admin_logs.delete_one(
         {"action": action, "target_discord_id": target_discord_id}
     )
+
+def save_user_preferences(prefs: UserPreferences) -> None:
+    db.user_preferences.update_one(
+        {"discord_id": prefs.discord_id},
+        {"$set": prefs.model_dump()},
+        upsert=True
+    )
+
+def get_user_preferences(discord_id: str) -> Optional[UserPreferences]:
+    prefs_data = db.user_preferences.find_one({"discord_id": discord_id})
+    if prefs_data:
+        return UserPreferences(**prefs_data)
+    return None

@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from utils.db import get_match, update_match_result, get_active_matches, get_leaderboard, update_leaderboard, get_player, add_admin_log, remove_admin_log, is_player_banned, is_player_timeout, get_queue, remove_player_from_queue, update_player_rank, get_banned_players, get_timeout_players
 from db.models.leaderboard import LeaderboardEntry
 from .leaderboard import LeaderboardCog
+from datetime import datetime, timezone
 
 load_dotenv()
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
@@ -370,16 +371,16 @@ class AdminCog(commands.Cog):
         embed.add_field(name="Reason", value=reason, inline=False)
         embed.add_field(name="Banned by", value=interaction.user.mention, inline=False)
         
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send("✅ User has been banned!", ephemeral=True)
         
-        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
-        for rank_group in rank_groups:
-            try:
-                queue = get_queue(rank_group)
-                if queue and any(p.discord_id == str(user.id) for p in queue.players):
-                    remove_player_from_queue(rank_group, str(user.id))
-            except Exception as e:
-                print(f"Error removing banned player from queue {rank_group}: {e}")
+        if self.admin_channel_id:
+            channel = self.bot.get_channel(self.admin_channel_id)
+            if channel:
+                await channel.send(embed=embed)
+        
+        queue_cog = self.bot.get_cog("QueueCog")
+        if queue_cog:
+            await queue_cog.remove_player_from_all_queues(interaction.guild, str(user.id))
 
     @app_commands.command(name="timeout")
     @app_commands.default_permissions(administrator=True)
@@ -413,16 +414,16 @@ class AdminCog(commands.Cog):
         embed.add_field(name="Duration", value=f"{duration} minutes", inline=False)
         embed.add_field(name="Timed out by", value=interaction.user.mention, inline=False)
         
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send("✅ User has been timed out!", ephemeral=True)
         
-        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
-        for rank_group in rank_groups:
-            try:
-                queue = get_queue(rank_group)
-                if queue and any(p.discord_id == str(user.id) for p in queue.players):
-                    remove_player_from_queue(rank_group, str(user.id))
-            except Exception as e:
-                print(f"Error removing timed out player from queue {rank_group}: {e}")
+        if self.admin_channel_id:
+            channel = self.bot.get_channel(self.admin_channel_id)
+            if channel:
+                await channel.send(embed=embed)
+        
+        queue_cog = self.bot.get_cog("QueueCog")
+        if queue_cog:
+            await queue_cog.remove_player_from_all_queues(interaction.guild, str(user.id))
 
     @app_commands.command(name="unban")
     @app_commands.default_permissions(administrator=True)
@@ -601,6 +602,12 @@ class AdminCog(commands.Cog):
                 await stats_cog.setup_existing_stats_channels()
                 await interaction.followup.send("✅ Stats channel refreshed", ephemeral=True)
 
+            add_admin_log(
+                action="refresh_all",
+                admin_discord_id=str(interaction.user.id),
+                reason="All channels refreshed"
+            )
+
             await interaction.followup.send(
                 "✅ All channels have been refreshed!",
                 ephemeral=True
@@ -620,11 +627,11 @@ class AdminCog(commands.Cog):
 
         banned_players = get_banned_players()
         if not banned_players:
-            await interaction.followup.send("No banned players found.", ephemeral=True)
+            await interaction.followup.send("No active bans found.", ephemeral=True)
             return
 
         embed = discord.Embed(
-            title="🔨 Banned Players",
+            title="🔨 Active Bans",
             color=discord.Color.red()
         )
 
@@ -647,22 +654,35 @@ class AdminCog(commands.Cog):
 
         timeout_players = get_timeout_players()
         if not timeout_players:
-            await interaction.followup.send("No timed out players found.", ephemeral=True)
+            await interaction.followup.send("No active timeouts found.", ephemeral=True)
             return
 
         embed = discord.Embed(
-            title="⏰ Timed Out Players",
+            title="⏰ Active Timeouts",
             color=discord.Color.orange()
         )
 
+        current_time = datetime.now(timezone.utc)
         for timeout in timeout_players:
-            user = interaction.guild.get_member(int(timeout["target_discord_id"]))
-            if user:
-                embed.add_field(
-                    name=f"{user.display_name}",
-                    value=f"Reason: {timeout['reason']}\nDuration: {timeout['duration_minutes']} minutes\nTimed out at: <t:{int(timeout['timestamp'].timestamp())}:R>",
-                    inline=False
-                )
+            timeout_time = timeout["timestamp"]
+            if timeout_time.tzinfo is None:
+                timeout_time = timeout_time.replace(tzinfo=timezone.utc)
+            duration = timeout["duration_minutes"]
+            time_diff = (current_time - timeout_time).total_seconds() / 60
+            
+            if time_diff < duration:
+                user = interaction.guild.get_member(int(timeout["target_discord_id"]))
+                if user:
+                    remaining_time = int(duration - time_diff)
+                    embed.add_field(
+                        name=f"{user.display_name}",
+                        value=f"Reason: {timeout['reason']}\nDuration: {timeout['duration_minutes']} minutes\nRemaining: {remaining_time} minutes\nTimed out at: <t:{int(timeout['timestamp'].timestamp())}:R>",
+                        inline=False
+                    )
+
+        if not embed.fields:
+            await interaction.followup.send("No active timeouts found.", ephemeral=True)
+            return
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
