@@ -378,9 +378,21 @@ class AdminCog(commands.Cog):
             if channel:
                 await channel.send(embed=embed)
         
-        queue_cog = self.bot.get_cog("QueueCog")
-        if queue_cog:
-            await queue_cog.remove_player_from_all_queues(interaction.guild, str(user.id))
+        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
+        for rank_group in rank_groups:
+            try:
+                queue = get_queue(rank_group)
+                if queue and any(p.discord_id == str(user.id) for p in queue.players):
+                    queue = remove_player_from_queue(rank_group, str(user.id))
+                    category = discord.utils.get(interaction.guild.categories, name="valohub")
+                    if category:
+                        channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
+                        if channel:
+                            queue_cog = self.bot.get_cog("QueueCog")
+                            if queue_cog:
+                                await queue_cog.update_queue_display(channel, queue)
+            except Exception as e:
+                print(f"Error removing banned player from queue {rank_group}: {e}")
 
     @app_commands.command(name="timeout")
     @app_commands.default_permissions(administrator=True)
@@ -398,6 +410,10 @@ class AdminCog(commands.Cog):
         duration: int
     ):
         await interaction.response.defer(ephemeral=True)
+
+        if is_player_banned(str(user.id)):
+            await interaction.followup.send(f"❌ {user.mention} is currently banned. Please unban them first.", ephemeral=True)
+            return
 
         if is_player_timeout(str(user.id)):
             await interaction.followup.send(f"❌ {user.mention} is already in timeout!", ephemeral=True)
@@ -421,9 +437,21 @@ class AdminCog(commands.Cog):
             if channel:
                 await channel.send(embed=embed)
         
-        queue_cog = self.bot.get_cog("QueueCog")
-        if queue_cog:
-            await queue_cog.remove_player_from_all_queues(interaction.guild, str(user.id))
+        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
+        for rank_group in rank_groups:
+            try:
+                queue = get_queue(rank_group)
+                if queue and any(p.discord_id == str(user.id) for p in queue.players):
+                    queue = remove_player_from_queue(rank_group, str(user.id))
+                    category = discord.utils.get(interaction.guild.categories, name="valohub")
+                    if category:
+                        channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
+                        if channel:
+                            queue_cog = self.bot.get_cog("QueueCog")
+                            if queue_cog:
+                                await queue_cog.update_queue_display(channel, queue)
+            except Exception as e:
+                print(f"Error removing timed out player from queue {rank_group}: {e}")
 
     @app_commands.command(name="unban")
     @app_commands.default_permissions(administrator=True)
@@ -457,7 +485,12 @@ class AdminCog(commands.Cog):
         )
         embed.add_field(name="Unbanned by", value=interaction.user.mention, inline=False)
         
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send("✅ User has been unbanned!", ephemeral=True)
+        
+        if self.admin_channel_id:
+            channel = self.bot.get_channel(self.admin_channel_id)
+            if channel:
+                await channel.send(embed=embed)
 
     @app_commands.command(name="set_rank")
     @app_commands.default_permissions(administrator=True)

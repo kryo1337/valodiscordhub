@@ -234,8 +234,13 @@ def is_player_timeout(discord_id: str) -> bool:
         timeout_time = timeout_time.replace(tzinfo=timezone.utc)
     duration = timeout["duration_minutes"]
     current_time = datetime.now(timezone.utc)
-    time_diff = (current_time - timeout_time).total_seconds() / 60
     
+    time_diff = (current_time - timeout_time).total_seconds() / 60.0
+    
+    if time_diff >= duration:
+        remove_admin_log("timeout", discord_id)
+        return False
+        
     return time_diff < duration
 
 def add_admin_log(action: str, admin_discord_id: str, target_discord_id: Optional[str] = None, 
