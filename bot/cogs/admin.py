@@ -9,9 +9,11 @@ from utils.db import get_match, update_match_result, get_active_matches, get_lea
 from db.models.leaderboard import LeaderboardEntry
 from .leaderboard import LeaderboardCog
 from datetime import datetime, timezone
+import logging
 
 load_dotenv()
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
+logger = logging.getLogger('valohub')
 
 class AdminCog(commands.Cog):
     def __init__(self, bot):
@@ -362,10 +364,11 @@ class AdminCog(commands.Cog):
             return
 
         add_admin_log("ban", str(interaction.user.id), str(user.id), reason=reason)
+        logger.info(f"Banned user {user.id} for reason: {reason}")
         
         embed = discord.Embed(
             title="🔨 User Banned",
-            description=f"{user.mention} has been banned from the queue system.",
+            description=f"{user.mention} has been banned",
             color=discord.Color.red()
         )
         embed.add_field(name="Reason", value=reason, inline=False)
@@ -378,21 +381,19 @@ class AdminCog(commands.Cog):
             if channel:
                 await channel.send(embed=embed)
         
-        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
-        for rank_group in rank_groups:
-            try:
-                queue = get_queue(rank_group)
-                if queue and any(p.discord_id == str(user.id) for p in queue.players):
-                    queue = remove_player_from_queue(rank_group, str(user.id))
-                    category = discord.utils.get(interaction.guild.categories, name="valohub")
-                    if category:
-                        channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
-                        if channel:
-                            queue_cog = self.bot.get_cog("QueueCog")
-                            if queue_cog:
-                                await queue_cog.update_queue_display(channel, queue)
-            except Exception as e:
-                print(f"Error removing banned player from queue {rank_group}: {e}")
+        queue_cog = self.bot.get_cog("QueueCog")
+        if queue_cog:
+            rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
+            for rank_group in rank_groups:
+                try:
+                    queue = get_queue(rank_group)
+                    if any(p.discord_id == str(user.id) for p in queue.players):
+                        queue = remove_player_from_queue(rank_group, str(user.id))
+                    await queue_cog.update_queue_message(interaction.guild, rank_group, queue)
+                except Exception as e:
+                    logger.error(f"Error updating queue {rank_group}: {e}")
+        else:
+            logger.error("QueueCog not found")
 
     @app_commands.command(name="timeout")
     @app_commands.default_permissions(administrator=True)
@@ -420,10 +421,11 @@ class AdminCog(commands.Cog):
             return
 
         add_admin_log("timeout", str(interaction.user.id), str(user.id), reason=reason, duration_minutes=duration)
+        logger.info(f"Timed out user {user.id} for {duration} minutes, reason: {reason}")
         
         embed = discord.Embed(
             title="⏰ User Timed Out",
-            description=f"{user.mention} has been timed out from the queue system for {duration} minutes.",
+            description=f"{user.mention} has been timed out for {duration} minutes",
             color=discord.Color.orange()
         )
         embed.add_field(name="Reason", value=reason, inline=False)
@@ -437,21 +439,19 @@ class AdminCog(commands.Cog):
             if channel:
                 await channel.send(embed=embed)
         
-        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
-        for rank_group in rank_groups:
-            try:
-                queue = get_queue(rank_group)
-                if queue and any(p.discord_id == str(user.id) for p in queue.players):
-                    queue = remove_player_from_queue(rank_group, str(user.id))
-                    category = discord.utils.get(interaction.guild.categories, name="valohub")
-                    if category:
-                        channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
-                        if channel:
-                            queue_cog = self.bot.get_cog("QueueCog")
-                            if queue_cog:
-                                await queue_cog.update_queue_display(channel, queue)
-            except Exception as e:
-                print(f"Error removing timed out player from queue {rank_group}: {e}")
+        queue_cog = self.bot.get_cog("QueueCog")
+        if queue_cog:
+            rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
+            for rank_group in rank_groups:
+                try:
+                    queue = get_queue(rank_group)
+                    if any(p.discord_id == str(user.id) for p in queue.players):
+                        queue = remove_player_from_queue(rank_group, str(user.id))
+                    await queue_cog.update_queue_message(interaction.guild, rank_group, queue)
+                except Exception as e:
+                    logger.error(f"Error updating queue {rank_group}: {e}")
+        else:
+            logger.error("QueueCog not found")
 
     @app_commands.command(name="unban")
     @app_commands.default_permissions(administrator=True)
@@ -480,7 +480,7 @@ class AdminCog(commands.Cog):
         
         embed = discord.Embed(
             title="✅ User Unbanned",
-            description=f"{user.mention} has been unbanned from the queue system.",
+            description=f"{user.mention} has been unbanned",
             color=discord.Color.green()
         )
         embed.add_field(name="Unbanned by", value=interaction.user.mention, inline=False)

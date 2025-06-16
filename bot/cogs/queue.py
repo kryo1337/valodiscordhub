@@ -3,6 +3,7 @@ from discord.ext import commands, tasks
 from discord import app_commands
 from datetime import datetime, timedelta, timezone
 import os
+import logging
 from dotenv import load_dotenv
 from db.models.queue import QueueEntry, Queue
 from utils.db import (
@@ -21,53 +22,12 @@ from .match import create_match
 load_dotenv()
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
 
+logger = logging.getLogger('valohub')
+
 class QueueView(discord.ui.View):
     def __init__(self, rank_group: str):
         super().__init__(timeout=None)
         self.rank_group = rank_group
-
-    async def update_queue_display(self, channel: discord.TextChannel, queue: Queue):
-        try:
-            async for message in channel.history(limit=1):
-                rank_group_colors = {
-                    "iron-plat": discord.Color.blue(),
-                    "dia-asc": discord.Color.green(),
-                    "imm-radiant": discord.Color.red()
-                }
-                
-                embed = discord.Embed(
-                    title=f"{self.rank_group.upper()} Queue",
-                    color=rank_group_colors[self.rank_group]
-                )
-                
-                progress = min(len(queue.players) * 10, 100)
-                progress_bar = "▰" * (progress // 10) + "▱" * ((100 - progress) // 10)
-                embed.add_field(
-                    name="Queue Status",
-                    value=f"`{progress_bar}` {len(queue.players)}/10",
-                    inline=False
-                )
-                
-                if queue.players:
-                    players_list = "\n".join([f"• <@{p.discord_id}>" for p in queue.players])
-                    embed.add_field(
-                        name="Players",
-                        value=players_list,
-                        inline=False
-                    )
-                else:
-                    embed.add_field(
-                        name="Players",
-                        value="Queue is empty",
-                        inline=False
-                    )
-                
-                embed.set_footer(text="Click the button below to join/leave the queue")
-                
-                await message.edit(embed=embed, view=self)
-                break
-        except Exception as e:
-            print(f"Error updating queue display: {str(e)}")
 
     @discord.ui.button(
         label="Queue",
@@ -127,7 +87,6 @@ class QueueView(discord.ui.View):
                     )
                     return
                 except Exception as e:
-                    print(f"Error leaving queue: {str(e)}")
                     await interaction.response.send_message(
                         f"An error occurred while leaving the queue: {str(e)}",
                         ephemeral=True
@@ -146,7 +105,6 @@ class QueueView(discord.ui.View):
                     )
                     return
                 except Exception as e:
-                    print(f"Error joining queue: {str(e)}")
                     await interaction.response.send_message(
                         f"An error occurred while joining the queue: {str(e)}",
                         ephemeral=True
@@ -159,16 +117,17 @@ class QueueView(discord.ui.View):
                     try:
                         queue = remove_player_from_queue(self.rank_group, player.discord_id)
                     except Exception as e:
-                        print(f"Error removing matched player from queue: {str(e)}")
+                        logger.error(f"Error removing matched player from queue: {str(e)}")
 
             queue = get_queue(self.rank_group)
-            await self.update_queue_display(interaction.channel, queue)
+            queue_cog = interaction.client.get_cog("QueueCog")
+            if queue_cog:
+                await queue_cog.update_queue_message(interaction.guild, self.rank_group, queue)
 
             if matched_players:
                 await create_match(interaction.guild, self.rank_group, matched_players)
 
         except Exception as e:
-            print(f"Error in queue button: {str(e)}")
             await interaction.response.send_message(
                 f"An error occurred: {str(e)}",
                 ephemeral=True
@@ -178,82 +137,9 @@ class QueueCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.bot.add_listener(self.on_ready)
-        self.check_queue_timeout.start()
 
     async def on_ready(self):
         await self.setup_existing_queues()
-
-    @tasks.loop(minutes=5)
-    async def check_queue_timeout(self):
-        current_time = datetime.now(timezone.utc)
-        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
-        
-        for rank_group in rank_groups:
-            try:
-                queue = get_queue(rank_group)
-                if not queue:
-                    continue
-
-                players_to_remove = []
-                for player in queue.players:
-                    time_in_queue = current_time - player.joined_at
-                    if time_in_queue > timedelta(hours=2):
-                        players_to_remove.append(player.discord_id)
-
-                if players_to_remove:
-                    for discord_id in players_to_remove:
-                        queue = remove_player_from_queue(rank_group, discord_id)
-                    
-                    guild = self.bot.get_guild(GUILD_ID)
-                    if guild:
-                        category = discord.utils.get(guild.categories, name="valohub")
-                        if category:
-                            channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
-                            if channel:
-                                async for message in channel.history(limit=1):
-                                    rank_group_colors = {
-                                        "iron-plat": discord.Color.blue(),
-                                        "dia-asc": discord.Color.green(),
-                                        "imm-radiant": discord.Color.red()
-                                    }
-                                    
-                                    embed = discord.Embed(
-                                        title=f"{rank_group.upper()} Queue",
-                                        color=rank_group_colors[rank_group]
-                                    )
-                                    
-                                    progress = min(len(queue.players) * 10, 100)
-                                    progress_bar = "▰" * (progress // 10) + "▱" * ((100 - progress) // 10)
-                                    embed.add_field(
-                                        name="Queue Status",
-                                        value=f"`{progress_bar}` {len(queue.players)}/10",
-                                        inline=False
-                                    )
-                                    
-                                    if queue.players:
-                                        players_list = "\n".join([f"• <@{p.discord_id}>" for p in queue.players])
-                                        embed.add_field(
-                                            name="Players",
-                                            value=players_list,
-                                            inline=False
-                                        )
-                                    else:
-                                        embed.add_field(
-                                            name="Players",
-                                            value="Queue is empty",
-                                            inline=False
-                                        )
-                                    
-                                    embed.set_footer(text="Click the button below to join/leave the queue")
-                                    
-                                    await message.edit(embed=embed, view=QueueView(rank_group))
-                                    break
-            except Exception as e:
-                print(f"Error checking queue timeout for {rank_group}: {str(e)}")
-
-    @check_queue_timeout.before_loop
-    async def before_check_queue_timeout(self):
-        await self.bot.wait_until_ready()
 
     async def setup_existing_queues(self):
         guild = self.bot.get_guild(GUILD_ID)
@@ -486,19 +372,35 @@ class QueueCog(commands.Cog):
         for rank_group in rank_groups:
             try:
                 queue = get_queue(rank_group)
-                if queue and any(p.discord_id == discord_id for p in queue.players):
-                    queue = remove_player_from_queue(rank_group, discord_id)
-                    category = discord.utils.get(guild.categories, name="valohub")
-                    if category:
-                        channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
-                        if channel:
-                            await self.update_queue_display(channel, queue)
-            except Exception as e:
-                print(f"Error removing player from queue {rank_group}: {e}")
+                if not queue:
+                    continue
+                    
+                if not any(p.discord_id == discord_id for p in queue.players):
+                    continue
 
-    async def update_queue_display(self, channel: discord.TextChannel, queue: Queue):
+                try:
+                    queue = remove_player_from_queue(rank_group, discord_id)
+                except Exception as e:
+                    logger.error(f"Error removing player from queue {rank_group}: {e}")
+                    continue
+
+                await self.update_queue_message(guild, rank_group, queue)
+
+            except Exception as e:
+                logger.error(f"Error removing player from queue {rank_group}: {e}")
+
+    async def update_queue_message(self, guild: discord.Guild, rank_group: str, queue: Queue):
         try:
-            async for message in channel.history(limit=1):
+            category = discord.utils.get(guild.categories, name="valohub")
+            if not category:
+                return
+
+            channel_name = f"queue-{rank_group}"
+            channel = discord.utils.get(category.channels, name=channel_name)
+
+            messages = [msg async for msg in channel.history(limit=1)]
+            if not messages:
+                view = QueueView(rank_group)
                 rank_group_colors = {
                     "iron-plat": discord.Color.blue(),
                     "dia-asc": discord.Color.green(),
@@ -506,8 +408,8 @@ class QueueCog(commands.Cog):
                 }
                 
                 embed = discord.Embed(
-                    title=f"{queue.rank_group.upper()} Queue",
-                    color=rank_group_colors[queue.rank_group]
+                    title=f"{rank_group.upper()} Queue",
+                    color=rank_group_colors[rank_group]
                 )
                 
                 progress = min(len(queue.players) * 10, 100)
@@ -534,10 +436,61 @@ class QueueCog(commands.Cog):
                 
                 embed.set_footer(text="Click the button below to join/leave the queue")
                 
-                await message.edit(embed=embed, view=QueueView(queue.rank_group))
-                break
+                await channel.send(embed=embed, view=view)
+                return
+
+            message = messages[0]
+            rank_group_colors = {
+                "iron-plat": discord.Color.blue(),
+                "dia-asc": discord.Color.green(),
+                "imm-radiant": discord.Color.red()
+            }
+            
+            embed = discord.Embed(
+                title=f"{rank_group.upper()} Queue",
+                color=rank_group_colors[rank_group]
+            )
+            
+            progress = min(len(queue.players) * 10, 100)
+            progress_bar = "▰" * (progress // 10) + "▱" * ((100 - progress) // 10)
+            embed.add_field(
+                name="Queue Status",
+                value=f"`{progress_bar}` {len(queue.players)}/10",
+                inline=False
+            )
+            
+            if queue.players:
+                players_list = "\n".join([f"• <@{p.discord_id}>" for p in queue.players])
+                embed.add_field(
+                    name="Players",
+                    value=players_list,
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="Players",
+                    value="Queue is empty",
+                    inline=False
+                )
+            
+            embed.set_footer(text="Click the button below to join/leave the queue")
+            
+            view = QueueView(rank_group)
+            try:
+                await message.edit(embed=embed, view=view)
+            except discord.NotFound:
+                await channel.send(embed=embed, view=view)
+            except discord.Forbidden:
+                logger.error(f"No permission to edit message in {rank_group}")
+            except Exception as e:
+                logger.error(f"Error updating queue message for {rank_group}: {e}")
+
+        except discord.NotFound:
+            logger.warning(f"Queue message not found for {rank_group}")
+        except discord.Forbidden:
+            logger.error(f"No permission to edit queue message in {rank_group}")
         except Exception as e:
-            print(f"Error updating queue display: {str(e)}")
+            logger.error(f"Error updating queue message for {rank_group}: {e}")
 
 async def setup(bot):
     cog = QueueCog(bot)

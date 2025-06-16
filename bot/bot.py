@@ -1,6 +1,7 @@
 import os
 import asyncio
 import discord
+import logging
 from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
@@ -15,6 +16,24 @@ if token is None:
 TOKEN: str = cast(str, token)
 
 BOT_PREFIX = "!"
+
+def setup_logger():
+    logging.getLogger().setLevel(logging.WARNING)
+    
+    logger = logging.getLogger('valohub')
+    logger.setLevel(logging.INFO)
+    
+    logger.handlers = []
+    
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    ))
+    logger.addHandler(console_handler)
+    
+    return logger
+
+logger = setup_logger()
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -38,6 +57,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
             ephemeral=True
         )
     else:
+        logger.error(f"Command error: {str(error)}")
         await interaction.response.send_message(
             f"An error occurred: {str(error)}",
             ephemeral=True
@@ -62,17 +82,17 @@ async def load_extensions():
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user.name}")
+    logger.info(f"Logged in as {bot.user.name}")
     try:
         if GUILD_ID:
             guild = discord.Object(id=GUILD_ID)
             synced = await bot.tree.sync(guild=guild)
-            print(f"Synced {len(synced)} slash command(s) for guild {GUILD_ID}.")
+            logger.info(f"Synced {len(synced)} slash command(s) for guild {GUILD_ID}.")
         else:
             synced = await bot.tree.sync()
-            print(f"Synced {len(synced)} global slash command(s).")
+            logger.info(f"Synced {len(synced)} global slash command(s).")
     except Exception as e:
-        print("Failed to sync slash commands:", e)
+        logger.error(f"Failed to sync slash commands: {e}")
 
 async def main():
     async with bot:

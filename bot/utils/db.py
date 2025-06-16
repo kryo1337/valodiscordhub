@@ -44,13 +44,19 @@ def get_queue(rank_group: str) -> Queue:
     queue_data = db.queues.find_one({"rank_group": rank_group})
     if queue_data:
         queue = Queue(**queue_data)
-        original_count = len(queue.players)
-        queue.players = [
+        original_players = queue.players
+        
+        filtered_players = [
             p for p in queue.players 
             if not is_player_banned(p.discord_id) and not is_player_timeout(p.discord_id)
         ]
-        if len(queue.players) != original_count:
-            update_queue(rank_group, queue.players)
+        
+        if len(filtered_players) != len(original_players):
+            queue.players = filtered_players
+            db.queues.update_one(
+                {"rank_group": rank_group},
+                {"$set": {"players": [p.model_dump() for p in filtered_players]}}
+            )
         return queue
     return Queue(rank_group=rank_group)
 
@@ -59,6 +65,7 @@ def update_queue(rank_group: str, players: List[QueueEntry]) -> Queue:
         p for p in players 
         if not is_player_banned(p.discord_id) and not is_player_timeout(p.discord_id)
     ]
+    
     queue = Queue(rank_group=rank_group, players=players)
     db.queues.update_one(
         {"rank_group": rank_group},
