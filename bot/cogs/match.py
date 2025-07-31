@@ -4,11 +4,11 @@ from typing import List, Optional, Union
 from datetime import datetime
 import asyncio
 import random
-from db.models.queue import QueueEntry
+from models.queue import QueueEntry
 from utils.db import update_match_defense, get_match, update_match_teams, update_match_result
 from utils.db import create_match as create_match_db
 from utils.db import get_leaderboard_page, update_leaderboard, get_leaderboard, get_player
-from db.models.leaderboard import LeaderboardEntry
+from models.leaderboard import LeaderboardEntry
 from .leaderboard import LeaderboardCog
 import time
 
@@ -180,7 +180,7 @@ class TeamSelectionView(discord.ui.View):
         guild = channel.guild
         match_category = discord.utils.get(guild.categories, name=self.match_id)
 
-        update_match_teams(
+        await update_match_teams(
             match_id=self.match_id,
             players_red=self.red_team,
             players_blue=self.blue_team
@@ -286,7 +286,7 @@ class SideSelectionView(discord.ui.View):
     async def update_message(self, message: discord.Message):
         self.last_message = message
         side_selector_team = "Red" if self.side_selector_id in self.red_team else "Blue"
-        match = get_match(self.match_id)
+        match = await get_match(self.match_id)
         
         embed = discord.Embed(
             title="Side Selection",
@@ -319,7 +319,7 @@ class SideSelectionView(discord.ui.View):
             inline=False
         )
         
-
+        
         if not self.red_side and not self.blue_side:
             embed.add_field(
                 name="Side Selection",
@@ -371,12 +371,12 @@ class SideSelectionView(discord.ui.View):
 
     async def check_sides(self, interaction: Union[discord.Interaction, discord.Message]):
         if self.red_side and self.blue_side:
-            update_match_defense(
+            await update_match_defense(
                 match_id=self.match_id,
                 defense_start="red" if self.red_side == "defense" else "blue"
             )
             
-            match = get_match(self.match_id)
+            match = await get_match(self.match_id)
 
             score_view = ScoreSubmissionView(self.match_id, self.red_team, self.blue_team)
             embed = discord.Embed(
@@ -635,17 +635,17 @@ class ScoreSubmissionView(discord.ui.View):
         return 0 <= score <= 13
 
     async def update_leaderboard_points(self, interaction: discord.Interaction, winner: str):
-        match = get_match(self.match_id)
+        match = await get_match(self.match_id)
         rank_group = match.rank_group
 
-        leaderboard = get_leaderboard(rank_group)
+        leaderboard = await get_leaderboard(rank_group)
         current_entries = {str(p.discord_id): p for p in leaderboard.players}
         updated_entries = []
 
         all_match_players = self.red_team + self.blue_team
         player_ranks = {}
         for player_id in all_match_players:
-            player = get_player(player_id)
+            player = await get_player(player_id)
             if player and player.rank:
                 player_ranks[player_id] = player.rank
 
@@ -687,7 +687,7 @@ class ScoreSubmissionView(discord.ui.View):
                 )
             updated_entries.append(entry)
 
-        update_leaderboard(rank_group, updated_entries)
+        await update_leaderboard(rank_group, updated_entries)
 
         history_cog = interaction.client.get_cog("HistoryCog")
         if history_cog:
@@ -751,7 +751,7 @@ class ScoreSubmissionView(discord.ui.View):
                 blue_score = self.red_score[1]
                 winner = "red" if red_score > blue_score else "blue"
                 
-                update_match_result(
+                await update_match_result(
                     match_id=self.match_id,
                     red_score=red_score,
                     blue_score=blue_score,
@@ -868,7 +868,7 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
         overwrites=overwrites
     )
     
-    leaderboard = get_leaderboard(rank_group)
+    leaderboard = await get_leaderboard(rank_group)
     
     player_ids = [p.discord_id for p in players]
     
@@ -893,7 +893,7 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
    
     lobby_master = random.choice(captains)
     
-    create_match_db(
+    await create_match_db(
         match_id=match_id,
         players_red=[],
         players_blue=[],

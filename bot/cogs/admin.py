@@ -6,13 +6,13 @@ import os
 import asyncio
 from dotenv import load_dotenv
 from utils.db import get_match, update_match_result, get_active_matches, get_leaderboard, update_leaderboard, get_player, add_admin_log, remove_admin_log, is_player_banned, is_player_timeout, get_queue, remove_player_from_queue, update_player_rank, get_banned_players, get_timeout_players
-from db.models.leaderboard import LeaderboardEntry
+from models.leaderboard import LeaderboardEntry
 from .leaderboard import LeaderboardCog
 from datetime import datetime, timezone
 import logging
 
 load_dotenv()
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID"))
 logger = logging.getLogger('valohub')
 
 class AdminCog(commands.Cog):
@@ -42,7 +42,7 @@ class AdminCog(commands.Cog):
         interaction: discord.Interaction,
         current: str,
     ) -> list[app_commands.Choice[str]]:
-        matches = get_active_matches()
+        matches = await get_active_matches()
         return [
             app_commands.Choice(name=match.match_id, value=match.match_id)
             for match in matches
@@ -60,22 +60,22 @@ class AdminCog(commands.Cog):
         return "imm-radiant" 
 
     async def update_leaderboard_points(self, match_id: str, winner: str):
-        match = get_match(match_id)
+        match = await get_match(match_id)
         
-        first_player = get_player(match.players_red[0])
+        first_player = await get_player(match.players_red[0])
         if not first_player or not first_player.rank:
             return
             
         rank_group = self.get_rank_group(first_player.rank)
 
-        leaderboard = get_leaderboard(rank_group)
+        leaderboard = await get_leaderboard(rank_group)
         current_entries = {str(p.discord_id): p for p in leaderboard.players}
         updated_entries = []
 
         all_match_players = match.players_red + match.players_blue
         player_ranks = {}
         for player_id in all_match_players:
-            player = get_player(player_id)
+            player = await get_player(player_id)
             if player and player.rank:
                 player_ranks[player_id] = player.rank
 
@@ -117,7 +117,7 @@ class AdminCog(commands.Cog):
                 )
             updated_entries.append(entry)
 
-        update_leaderboard(rank_group, updated_entries)
+        await update_leaderboard(rank_group, updated_entries)
 
         history_cog = self.bot.get_cog("HistoryCog")
         if history_cog:
@@ -146,7 +146,7 @@ class AdminCog(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        match = get_match(match_id)
+        match = await get_match(match_id)
         if not match:
             await interaction.followup.send("Match not found!", ephemeral=True)
             return
@@ -162,14 +162,14 @@ class AdminCog(commands.Cog):
 
         if result == "cancelled" and match.result and match.result != "cancelled":
             await self.revert_leaderboard_points(match_id, match.result)
-            add_admin_log(
+            await add_admin_log(
                 action="revert_match",
                 admin_discord_id=str(interaction.user.id),
                 match_id=match_id,
                 reason="Match result reverted due to cancellation"
             )
 
-        update_match_result(
+        await update_match_result(
             match_id=match_id,
             red_score=red_score if result != "cancelled" else None,
             blue_score=blue_score if result != "cancelled" else None,
@@ -178,14 +178,14 @@ class AdminCog(commands.Cog):
 
         if result != "cancelled":
             await self.update_leaderboard_points(match_id, result)
-            add_admin_log(
+            await add_admin_log(
                 action="set_result",
                 admin_discord_id=str(interaction.user.id),
                 match_id=match_id,
                 reason=f"Match result set to {result} (Red: {red_score}, Blue: {blue_score})"
             )
         else:
-            add_admin_log(
+            await add_admin_log(
                 action="cancel_match",
                 admin_discord_id=str(interaction.user.id),
                 match_id=match_id,
@@ -203,22 +203,22 @@ class AdminCog(commands.Cog):
         await self.cleanup_match_channels(interaction.guild, match_id)
 
     async def revert_leaderboard_points(self, match_id: str, previous_result: str):
-        match = get_match(match_id)
+        match = await get_match(match_id)
         
-        first_player = get_player(match.players_red[0])
+        first_player = await get_player(match.players_red[0])
         if not first_player or not first_player.rank:
             return
             
         rank_group = self.get_rank_group(first_player.rank)
 
-        leaderboard = get_leaderboard(rank_group)
+        leaderboard = await get_leaderboard(rank_group)
         current_entries = {str(p.discord_id): p for p in leaderboard.players}
         updated_entries = []
 
         all_match_players = match.players_red + match.players_blue
         player_ranks = {}
         for player_id in all_match_players:
-            player = get_player(player_id)
+            player = await get_player(player_id)
             if player and player.rank:
                 player_ranks[player_id] = player.rank
 
@@ -248,7 +248,7 @@ class AdminCog(commands.Cog):
                 entry.streak = min(0, entry.streak + 1)
                 updated_entries.append(entry)
 
-        update_leaderboard(rank_group, updated_entries)
+        await update_leaderboard(rank_group, updated_entries)
 
         history_cog = self.bot.get_cog("HistoryCog")
         if history_cog:
@@ -359,11 +359,11 @@ class AdminCog(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        if is_player_banned(str(user.id)):
+        if await is_player_banned(str(user.id)):
             await interaction.followup.send(f"❌ {user.mention} is already banned!", ephemeral=True)
             return
 
-        add_admin_log("ban", str(interaction.user.id), str(user.id), reason=reason)
+        await add_admin_log("ban", str(interaction.user.id), str(user.id), reason=reason)
         logger.info(f"Banned user {user.id} for reason: {reason}")
         
         embed = discord.Embed(
@@ -386,9 +386,9 @@ class AdminCog(commands.Cog):
             rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
             for rank_group in rank_groups:
                 try:
-                    queue = get_queue(rank_group)
+                    queue = await get_queue(rank_group)
                     if any(p.discord_id == str(user.id) for p in queue.players):
-                        queue = remove_player_from_queue(rank_group, str(user.id))
+                        queue = await remove_player_from_queue(rank_group, str(user.id))
                     await queue_cog.update_queue_message(interaction.guild, rank_group, queue)
                 except Exception as e:
                     logger.error(f"Error updating queue {rank_group}: {e}")
@@ -412,15 +412,15 @@ class AdminCog(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        if is_player_banned(str(user.id)):
+        if await is_player_banned(str(user.id)):
             await interaction.followup.send(f"❌ {user.mention} is currently banned. Please unban them first.", ephemeral=True)
             return
 
-        if is_player_timeout(str(user.id)):
+        if await is_player_timeout(str(user.id)):
             await interaction.followup.send(f"❌ {user.mention} is already in timeout!", ephemeral=True)
             return
 
-        add_admin_log("timeout", str(interaction.user.id), str(user.id), reason=reason, duration_minutes=duration)
+        await add_admin_log("timeout", str(interaction.user.id), str(user.id), reason=reason, duration_minutes=duration)
         logger.info(f"Timed out user {user.id} for {duration} minutes, reason: {reason}")
         
         embed = discord.Embed(
@@ -444,9 +444,9 @@ class AdminCog(commands.Cog):
             rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
             for rank_group in rank_groups:
                 try:
-                    queue = get_queue(rank_group)
+                    queue = await get_queue(rank_group)
                     if any(p.discord_id == str(user.id) for p in queue.players):
-                        queue = remove_player_from_queue(rank_group, str(user.id))
+                        queue = await remove_player_from_queue(rank_group, str(user.id))
                     await queue_cog.update_queue_message(interaction.guild, rank_group, queue)
                 except Exception as e:
                     logger.error(f"Error updating queue {rank_group}: {e}")
@@ -466,17 +466,17 @@ class AdminCog(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        was_banned = is_player_banned(str(user.id))
-        was_timeout = is_player_timeout(str(user.id))
+        was_banned = await is_player_banned(str(user.id))
+        was_timeout = await is_player_timeout(str(user.id))
 
         if not was_banned and not was_timeout:
             await interaction.followup.send(f"❌ {user.mention} is not banned or in timeout!", ephemeral=True)
             return
 
         if was_banned:
-            remove_admin_log("ban", str(user.id))
+            await remove_admin_log("ban", str(user.id))
         if was_timeout:
-            remove_admin_log("timeout", str(user.id))
+            await remove_admin_log("timeout", str(user.id))
         
         embed = discord.Embed(
             title="✅ User Unbanned",
@@ -519,26 +519,26 @@ class AdminCog(commands.Cog):
             if new_role and new_role not in user.roles:
                 await user.add_roles(new_role)
 
-            player = get_player(str(user.id))
+            player = await get_player(str(user.id))
             if not player:
                 await interaction.followup.send(f"❌ {user.mention} is not registered!", ephemeral=True)
                 return
 
-            update_player_rank(str(user.id), rank)
+            await update_player_rank(str(user.id), rank)
 
-            leaderboard = get_leaderboard(rank_group)
+            leaderboard = await get_leaderboard(rank_group)
             if leaderboard:
                 for entry in leaderboard.players:
                     if entry.discord_id == str(user.id):
                         entry.rank = rank
                         break
-                update_leaderboard(rank_group, leaderboard.players)
+                await update_leaderboard(rank_group, leaderboard.players)
 
             leaderboard_cog = interaction.client.get_cog("LeaderboardCog")
             if leaderboard_cog:
                 await leaderboard_cog.update_leaderboard()
 
-            add_admin_log(
+            await add_admin_log(
                 action="set_rank",
                 admin_discord_id=str(interaction.user.id),
                 target_discord_id=str(user.id),
@@ -566,26 +566,22 @@ class AdminCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            player = get_player(str(user.id))
+            player = await get_player(str(user.id))
             if not player:
                 await interaction.followup.send(f"❌ {user.mention} is not registered!", ephemeral=True)
                 return
 
-            player.points = points
-            db.players.update_one(
-                {"discord_id": str(user.id)},
-                {"$set": {"points": points}}
-            )
+            await update_player_rank(str(user.id), player.rank)
 
             rank_group = self.get_rank_group(player.rank)
-            leaderboard = get_leaderboard(rank_group)
+            leaderboard = await get_leaderboard(rank_group)
             for entry in leaderboard.players:
                 if entry.discord_id == str(user.id):
                     entry.points = points
                     break
-            update_leaderboard(rank_group, leaderboard.players)
+            await update_leaderboard(rank_group, leaderboard.players)
 
-            add_admin_log(
+            await add_admin_log(
                 action="set_points",
                 admin_discord_id=str(interaction.user.id),
                 target_discord_id=str(user.id),
@@ -635,7 +631,7 @@ class AdminCog(commands.Cog):
                 await stats_cog.setup_existing_stats_channels()
                 await interaction.followup.send("✅ Stats channel refreshed", ephemeral=True)
 
-            add_admin_log(
+            await add_admin_log(
                 action="refresh_all",
                 admin_discord_id=str(interaction.user.id),
                 reason="All channels refreshed"
@@ -658,7 +654,7 @@ class AdminCog(commands.Cog):
     async def list_bans(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        banned_players = get_banned_players()
+        banned_players = await get_banned_players()
         if not banned_players:
             await interaction.followup.send("No active bans found.", ephemeral=True)
             return
@@ -685,7 +681,7 @@ class AdminCog(commands.Cog):
     async def list_timeouts(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        timeout_players = get_timeout_players()
+        timeout_players = await get_timeout_players()
         if not timeout_players:
             await interaction.followup.send("No active timeouts found.", ephemeral=True)
             return

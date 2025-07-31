@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID"))
 
 class StatsCog(commands.Cog):
     def __init__(self, bot):
@@ -102,7 +102,7 @@ class ShowMyStatsButton(discord.ui.Button):
         
         target_user = interaction.user
         target_id = str(target_user.id)
-        db_player = get_player(target_id)
+        db_player = await get_player(target_id)
         if not db_player:
             await interaction.followup.send(f"{target_user.mention} is not registered!", ephemeral=True)
             return
@@ -117,12 +117,12 @@ class ShowMyStatsButton(discord.ui.Button):
             await interaction.followup.send(f"{target_user.mention} doesn't have a valid rank group role!", ephemeral=True)
             return
 
-        player = get_player_rank(rank_group, target_id)
+        player = await get_player_rank(rank_group, target_id)
         if not player:
             await interaction.followup.send(f"{target_user.mention} hasn't played any matches yet!", ephemeral=True)
             return
 
-        all_players = get_leaderboard_page(rank_group, 1, 1000)
+        all_players = await get_leaderboard_page(rank_group, 1, 1000)
         sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
         
         position = None
@@ -211,7 +211,7 @@ class SearchStatsModal(discord.ui.Modal, title="Search Player Stats"):
             return
 
         target_id = str(found_user.id)
-        db_player = get_player(target_id)
+        db_player = await get_player(target_id)
         if not db_player:
             await interaction.followup.send(f"{found_user.mention} is not registered!", ephemeral=True)
             return
@@ -226,12 +226,12 @@ class SearchStatsModal(discord.ui.Modal, title="Search Player Stats"):
             await interaction.followup.send(f"{found_user.mention} doesn't have a valid rank group role!", ephemeral=True)
             return
 
-        player = get_player_rank(rank_group, target_id)
+        player = await get_player_rank(rank_group, target_id)
         if not player:
             await interaction.followup.send(f"{found_user.mention} hasn't played any matches yet!", ephemeral=True)
             return
 
-        all_players = get_leaderboard_page(rank_group, 1, 1000)
+        all_players = await get_leaderboard_page(rank_group, 1, 1000)
         sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
         
         position = None

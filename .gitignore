@@ -1,3 +1,7 @@
 /scraper/venv/
 .env
 /db/models/__pycache__
+/api/venv/
+/api/__pycache__/
+**/__pycache__/
+**/venv/

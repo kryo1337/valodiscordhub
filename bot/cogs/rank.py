@@ -10,7 +10,7 @@ from utils.rate_limit import rate_limiter
 from utils.permissions import check_player_status
 
 load_dotenv()
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID"))
 
 RANK_GROUPS = {
     "iron-plat": ["Iron", "Bronze", "Silver", "Gold", "Platinum"],
@@ -60,9 +60,9 @@ class RankModal(discord.ui.Modal, title="Enter your Riot ID"):
         try:
             rank = await get_player_rank(self.riot_id.value)
             if not rank or "error" in rank.lower():
-                player = get_player(str(interaction.user.id))
+                player = await get_player(str(interaction.user.id))
                 if not player:
-                    player = create_player(
+                    player = await create_player(
                         discord_id=str(interaction.user.id),
                         riot_id=self.riot_id.value,
                         rank=None
@@ -83,11 +83,11 @@ class RankModal(discord.ui.Modal, title="Enter your Riot ID"):
             rate_limiter.update_cooldown(user_id, "rank")
 
             member = interaction.user
-            player = get_player(str(interaction.user.id))
+            player = await get_player(str(interaction.user.id))
             role_assigned = False
 
             if not player:
-                player = create_player(
+                player = await create_player(
                     discord_id=str(interaction.user.id),
                     riot_id=self.riot_id.value,
                     rank=rank
@@ -111,7 +111,7 @@ class RankModal(discord.ui.Modal, title="Enter your Riot ID"):
                     )
                     return
 
-                player = update_player_rank(str(interaction.user.id), rank)
+                player = await update_player_rank(str(interaction.user.id), rank)
                 role_name = self.get_role_name_from_rank(rank)
                 if role_name:
                     role_assigned = await self.assign_role(member, role_name)

@@ -2,12 +2,12 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from utils.db import get_leaderboard_page, get_player, get_user_preferences, save_user_preferences
-from db.models.preferences import UserPreferences
+from models.preferences import UserPreferences
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID"))
 
 class UserLeaderboardView(discord.ui.View):
     def __init__(self, cog, interaction, user_prefs, total_pages):
@@ -26,7 +26,7 @@ class UserLeaderboardView(discord.ui.View):
         self.add_item(PageSizeSelect(self))
 
     async def update_display(self, interaction: discord.Interaction = None):
-        save_user_preferences(self.user_prefs)
+        await save_user_preferences(self.user_prefs)
         await self.cog.update_user_leaderboard_display(interaction or self.interaction, self.user_prefs, self)
 
 class RankGroupSelect(discord.ui.Select):
@@ -157,7 +157,7 @@ class ShowLeaderboardButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
-        user_prefs = get_user_preferences(str(interaction.user.id))
+        user_prefs = await get_user_preferences(str(interaction.user.id))
         if not user_prefs:
             user_prefs = UserPreferences(
                 discord_id=str(interaction.user.id),
@@ -247,7 +247,7 @@ class LeaderboardCog(commands.Cog):
     async def show_leaderboard(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
-        user_prefs = get_user_preferences(str(interaction.user.id))
+        user_prefs = await get_user_preferences(str(interaction.user.id))
         if not user_prefs:
             user_prefs = UserPreferences(
                 discord_id=str(interaction.user.id),
@@ -280,7 +280,7 @@ class LeaderboardCog(commands.Cog):
         page = user_prefs.page
         page_size = user_prefs.page_size
 
-        all_players = get_leaderboard_page(rank_group, 1, 1000)
+        all_players = await get_leaderboard_page(rank_group, 1, 1000)
         sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
         
         start_idx = (page - 1) * page_size
@@ -307,7 +307,7 @@ class LeaderboardCog(commands.Cog):
             except:
                 name = f"<@{player.discord_id}>"
             
-            db_player = get_player(player.discord_id)
+            db_player = await get_player(player.discord_id)
             if not db_player:
                 continue
             

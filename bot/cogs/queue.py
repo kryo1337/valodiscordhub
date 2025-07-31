@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import os
 import logging
 from dotenv import load_dotenv
-from db.models.queue import QueueEntry, Queue
+from models.queue import QueueEntry, Queue
 from utils.db import (
     get_player,
     add_to_queue,
@@ -20,7 +20,7 @@ from utils.rate_limit import rate_limiter
 from .match import create_match
 
 load_dotenv()
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID"))
 
 logger = logging.getLogger('valohub')
 
@@ -50,20 +50,20 @@ class QueueView(discord.ui.View):
             return
 
         try:
-            player = get_player(user_id)
+            player = await get_player(user_id)
             if not player:
                 await interaction.response.send_message(
                     "You need to register first using `/rank` command!", ephemeral=True
                 )
                 return
 
-            if is_player_banned(user_id):
+            if await is_player_banned(user_id):
                 await interaction.response.send_message(
                     "You are banned from the queue system!", ephemeral=True
                 )
                 return
 
-            if is_player_timeout(user_id):
+            if await is_player_timeout(user_id):
                 await interaction.response.send_message(
                     "You are in timeout and cannot join the queue!", ephemeral=True
                 )
@@ -71,12 +71,12 @@ class QueueView(discord.ui.View):
 
             rate_limiter.update_cooldown(user_id, "queue")
 
-            queue = get_queue(self.rank_group)
+            queue = await get_queue(self.rank_group)
             player_in_queue = any(p.discord_id == user_id for p in queue.players)
 
             if player_in_queue:
                 try:
-                    queue = remove_player_from_queue(self.rank_group, user_id)
+                    queue = await remove_player_from_queue(self.rank_group, user_id)
                     await interaction.response.send_message(
                         "You have left the queue!", ephemeral=True
                     )
@@ -94,7 +94,7 @@ class QueueView(discord.ui.View):
                     return
             else:
                 try:
-                    queue = add_to_queue(self.rank_group, user_id)
+                    queue = await add_to_queue(self.rank_group, user_id)
                     await interaction.response.send_message(
                         "You have joined the queue!", ephemeral=True
                     )
@@ -115,11 +115,11 @@ class QueueView(discord.ui.View):
                 matched_players = queue.players[:10]
                 for player in matched_players:
                     try:
-                        queue = remove_player_from_queue(self.rank_group, player.discord_id)
+                        queue = await remove_player_from_queue(self.rank_group, player.discord_id)
                     except Exception as e:
                         logger.error(f"Error removing matched player from queue: {str(e)}")
 
-            queue = get_queue(self.rank_group)
+            queue = await get_queue(self.rank_group)
             queue_cog = interaction.client.get_cog("QueueCog")
             if queue_cog:
                 await queue_cog.update_queue_message(interaction.guild, self.rank_group, queue)
@@ -160,7 +160,7 @@ class QueueCog(commands.Cog):
                     except discord.NotFound:
                         pass
                 
-                queue = get_queue(rank_group) or Queue(rank_group=rank_group, players=[])
+                queue = await get_queue(rank_group) or Queue(rank_group=rank_group, players=[])
                 view = QueueView(rank_group)
                 
                 rank_group_colors = {
@@ -231,21 +231,21 @@ class QueueCog(commands.Cog):
             riot_id = f"TestUser{i}"
             rank = "Immortal 3"
 
-            player = get_player(discord_id)
+            player = await get_player(discord_id)
             if not player:
-                player = create_player(discord_id, riot_id, rank)
+                player = await create_player(discord_id, riot_id, rank)
 
             queue_entry = QueueEntry(
                 discord_id=player.discord_id
             )
             test_players.append(queue_entry)
 
-        queue = get_queue("imm-radiant")
+            queue = await get_queue("imm-radiant")
         if not queue:
             queue = Queue(rank_group="imm-radiant", players=[])
 
         queue.players.extend(test_players)
-        update_queue("imm-radiant", queue.players)
+        await update_queue("imm-radiant", queue.players)
 
         async for message in channel.history(limit=1):
             rank_group_colors = {
@@ -323,7 +323,7 @@ class QueueCog(commands.Cog):
                 name=f"queue-{rank_group}", overwrites=overwrites
             )
 
-            queue = get_queue(rank_group) or Queue(rank_group=rank_group, players=[])
+            queue = await get_queue(rank_group) or Queue(rank_group=rank_group, players=[])
             view = QueueView(rank_group)
             
             rank_group_colors = {
@@ -371,7 +371,7 @@ class QueueCog(commands.Cog):
         rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
         for rank_group in rank_groups:
             try:
-                queue = get_queue(rank_group)
+                queue = await get_queue(rank_group)
                 if not queue:
                     continue
                     
@@ -379,7 +379,7 @@ class QueueCog(commands.Cog):
                     continue
 
                 try:
-                    queue = remove_player_from_queue(rank_group, discord_id)
+                    queue = await remove_player_from_queue(rank_group, discord_id)
                 except Exception as e:
                     logger.error(f"Error removing player from queue {rank_group}: {e}")
                     continue

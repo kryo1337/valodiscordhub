@@ -52,12 +52,14 @@ def create_indexes(db):
     db.admin_logs.create_index([("match_id", ASCENDING)])
     db.admin_logs.create_index([("action", ASCENDING), ("timestamp", DESCENDING)])
 
+    db.preferences.create_index([("discord_id", ASCENDING)], unique=True)
+
 try:
     print(f"Attempting to connect to MongoDB with URI: {MONGO_URI}")
     client = wait_for_mongodb()
     db = client.valodiscordhub
 
-    collections = ["admin_logs", "leaderboards", "matches", "players", "queues"]
+    collections = ["admin_logs", "leaderboards", "matches", "players", "queues", "preferences"]
 
     for col in collections:
         if col not in db.list_collection_names():

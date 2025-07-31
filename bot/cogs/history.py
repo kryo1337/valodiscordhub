@@ -4,12 +4,12 @@ from discord import app_commands
 from typing import List
 from datetime import datetime, timezone
 from utils.db import get_match_history
-from db.models.match import Match
+from models.match import Match
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID"))
 
 class HistoryCog(commands.Cog):
     def __init__(self, bot):
@@ -71,7 +71,7 @@ class HistoryCog(commands.Cog):
     async def update_history_display(self, channel: discord.TextChannel):
         await channel.purge()
 
-        matches = get_match_history(limit=None)
+        matches = await get_match_history(limit=None)
         if not matches:
             await channel.send("No match history found.")
             return

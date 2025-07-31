@@ -18,18 +18,33 @@ services:
     environment:
       - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/valodiscordhub?authSource=admin
 
-  bot:
-    build: ./bot
+  api:
+    build: ./api
     depends_on:
       - mongo
       - db-init
     environment:
       - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/valodiscordhub?authSource=admin
-      - PYTHONPATH=/bot:/bot/..
-    volumes:
-      - ./db:/bot/db
+      - MONGODB_DB=valodiscordhub
+    ports:
+      - "8000:8000"
     env_file:
       - .env
+
+  bot:
+    build: ./bot
+    depends_on:
+      - mongo
+      - db-init
+      - api
+    environment:
+      - API_BASE_URL=http://api:8000
+      - PYTHONPATH=/bot:/bot/..
+    env_file:
+      - .env
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
 
 volumes:
   mongo_data:
