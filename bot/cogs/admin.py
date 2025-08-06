@@ -314,13 +314,37 @@ class AdminCog(commands.Cog):
             )
             await channel.send(embed=embed)
             
+            existing_ranks_channel = discord.utils.get(category.channels, name="admin-ranks")
+            if existing_ranks_channel:
+                await existing_ranks_channel.delete()
+
+            ranks_overwrites = {
+                interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            }
+
+            ranks_channel = await category.create_text_channel(
+                name="admin-ranks",
+                overwrites=ranks_overwrites,
+                topic="Rank verification requests"
+            )
+            
+            embed_ranks = discord.Embed(
+                title="Rank Verification Requests",
+                description="Rank verification requests will appear here for admin review.",
+                color=discord.Color.blue()
+            )
+            await ranks_channel.send(embed=embed_ranks)
+            
             await interaction.followup.send(
-                f"✅ Admin channel created: {channel.mention}",
+                f"✅ Admin channels created:\n"
+                f"• Admin: {channel.mention}\n"
+                f"• Admin-Ranks: {ranks_channel.mention}",
                 ephemeral=True
             )
         except Exception as e:
             await interaction.followup.send(
-                f"❌ Failed to create admin channel: {str(e)}",
+                f"❌ Failed to create admin channels: {str(e)}",
                 ephemeral=True
             )
 

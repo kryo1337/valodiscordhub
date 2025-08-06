@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: valodiscordhub
+data:
+  MONGODB_URI: "mongodb://admin:adminpassword@mongodb-service:27017"
+  MONGODB_DB: "valodiscordhub"
+  API_BASE_URL: "https://api.valodiscordhub.com"
+  DISCORD_REDIRECT_URI: "https://valodiscordhub.com/auth/callback"
+  RATE_LIMIT: "100"
+  RATE_PERIOD: "60"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bot-config
+  namespace: valodiscordhub
+data:
+  API_BASE_URL: "http://api-service:8000"
+  DISCORD_GUILD_ID: "1051909826407563264" 

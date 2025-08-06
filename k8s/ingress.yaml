@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress
+  namespace: valodiscordhub
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    # Uncomment when you have cert-manager installed
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  # Uncomment when you have SSL certificates
+  # tls:
+  # - hosts:
+  #   - api.valodiscordhub.com
+  #   secretName: api-tls
+  rules:
+  - host: api.valodiscordhub.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-service
+            port:
+              number: 8000 

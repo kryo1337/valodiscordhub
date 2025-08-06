@@ -9,14 +9,14 @@ def check_admin(interaction: discord.Interaction) -> bool:
 def check_rank_group(interaction: discord.Interaction, required_rank_group: str) -> bool:
     return any(role.name == required_rank_group for role in interaction.user.roles)
 
-def check_player_status(user_id: str) -> tuple[bool, Optional[str]]:
-    if is_player_banned(user_id):
+async def check_player_status(user_id: str) -> tuple[bool, Optional[str]]:
+    if await is_player_banned(user_id):
         return False, "You are banned from using this command."
-    if is_player_timeout(user_id):
+    if await is_player_timeout(user_id):
         return False, "You are currently in timeout."
     return True, None
 
-def check_command_permissions(interaction: discord.Interaction, command_name: str) -> tuple[bool, Optional[str]]:
+async def check_command_permissions(interaction: discord.Interaction, command_name: str) -> tuple[bool, Optional[str]]:
     if command_name in ["setup_admin", "setup_queue", "setup_rank", "setup_leaderboard", 
                        "setup_history", "setup_stats", "ban", "unban", "timeout", 
                        "set_rank", "set_points", "refresh_all"]:
@@ -25,13 +25,13 @@ def check_command_permissions(interaction: discord.Interaction, command_name: st
         return True, None
 
     if command_name == "queue":
-        allowed, reason = check_player_status(str(interaction.user.id))
+        allowed, reason = await check_player_status(str(interaction.user.id))
         if not allowed:
             return False, reason
         return True, None
 
     if command_name == "rank":
-        allowed, reason = check_player_status(str(interaction.user.id))
+        allowed, reason = await check_player_status(str(interaction.user.id))
         if not allowed:
             return False, reason
         return True, None
