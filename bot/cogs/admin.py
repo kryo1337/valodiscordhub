@@ -739,6 +739,68 @@ class AdminCog(commands.Cog):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+    @app_commands.command(name="rank_tickets")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def rank_tickets(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            category = discord.utils.get(interaction.guild.categories, name="valohub")
+            if not category:
+                await interaction.followup.send("❌ valohub category not found!", ephemeral=True)
+                return
+
+            admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks")
+            if not admin_ranks_channel:
+                await interaction.followup.send("❌ admin-ranks channel not found!", ephemeral=True)
+                return
+
+            # Get recent rank ticket messages
+            ticket_messages = []
+            async for message in admin_ranks_channel.history(limit=20):
+                if (message.author == interaction.client.user and 
+                    message.embeds and 
+                    message.embeds[0].footer and 
+                    "Ticket ID:" in message.embeds[0].footer.text):
+                    ticket_messages.append(message)
+
+            if not ticket_messages:
+                await interaction.followup.send("No active rank tickets found.", ephemeral=True)
+                return
+
+            embed = discord.Embed(
+                title="🎮 Active Rank Tickets",
+                description=f"Found {len(ticket_messages)} active rank verification requests",
+                color=discord.Color.blue()
+            )
+
+            for i, message in enumerate(ticket_messages[:10], 1):  # Show max 10 tickets
+                embed_data = message.embeds[0]
+                user_id = embed_data.footer.text.split(": ")[1]
+                user = interaction.guild.get_member(int(user_id))
+                user_mention = user.mention if user else f"<@{user_id}>"
+                
+                riot_id = embed_data.description.split("**Riot ID:** ")[1].split("\n")[0]
+                
+                embed.add_field(
+                    name=f"Ticket #{i}",
+                    value=f"User: {user_mention}\nRiot ID: {riot_id}\n[View Ticket]({message.jump_url})",
+                    inline=True
+                )
+
+            if len(ticket_messages) > 10:
+                embed.add_field(
+                    name="More Tickets",
+                    value=f"There are {len(ticket_messages) - 10} more tickets. Check the {admin_ranks_channel.mention} channel.",
+                    inline=False
+                )
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 class AdminReportView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
