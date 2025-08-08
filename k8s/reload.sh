@@ -5,7 +5,7 @@
 echo "🔄 Quick reload for ValoDiscordHub development..."
 
 # Check if we're in the right directory
-if [ ! -f "../api/main.py" ] || [ ! -f "../bot/bot.py" ]; then
+if [ ! -f "../api/main.py" ] || [ ! -f "../bot/bot.py" ] || [ ! -f "../frontend/package.json" ]; then
     echo "❌ Please run this script from the k8s directory"
     exit 1
 fi
@@ -18,17 +18,20 @@ echo "🐳 Building Docker images..."
 cd ..
 docker build -t valodiscordhub/api:latest ./api
 docker build -t valodiscordhub/bot:latest ./bot
+docker build -t valodiscordhub/frontend:latest ./frontend
 cd k8s
 
 # Restart deployments
 echo "🔄 Restarting deployments..."
 kubectl rollout restart deployment/api-deployment -n valodiscordhub
 kubectl rollout restart deployment/bot-deployment -n valodiscordhub
+kubectl rollout restart deployment/frontend-deployment -n valodiscordhub
 
 # Wait for rollouts to complete
 echo "⏳ Waiting for rollouts to complete..."
 kubectl rollout status deployment/api-deployment -n valodiscordhub
 kubectl rollout status deployment/bot-deployment -n valodiscordhub
+kubectl rollout status deployment/frontend-deployment -n valodiscordhub
 
 echo "✅ Reload completed!"
 echo "📊 Current status:"

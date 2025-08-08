@@ -88,6 +88,14 @@ yarn-error.log*
 .npm
 .yarn-integrity
 
+# Frontend specific
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env*
+frontend/build/
+frontend/out/
+
 # Build outputs
 dist/
 build/

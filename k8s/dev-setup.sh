@@ -48,6 +48,10 @@ docker build -t valodiscordhub/api:latest ./api
 echo "Building Bot image..."
 docker build -t valodiscordhub/bot:latest ./bot
 
+# Build Frontend image
+echo "Building Frontend image..."
+docker build -t valodiscordhub/frontend:latest ./frontend
+
 echo "✅ Images built and loaded into minikube"
 
 # Show minikube status

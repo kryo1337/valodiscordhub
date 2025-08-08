@@ -46,5 +46,15 @@ services:
       - 8.8.8.8
       - 8.8.4.4
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://api:8000
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+
 volumes:
   mongo_data:

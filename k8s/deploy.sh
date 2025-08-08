@@ -49,6 +49,10 @@ kubectl apply -f api-deployment.yaml
 echo "🤖 Deploying Bot..."
 kubectl apply -f bot-deployment.yaml
 
+# Deploy Frontend
+echo "🎨 Deploying Frontend..."
+kubectl apply -f frontend-deployment.yaml
+
 # Deploy Ingress
 echo "🌍 Deploying Ingress..."
 kubectl apply -f ingress.yaml
@@ -65,9 +69,13 @@ echo ""
 echo "🔍 To check logs:"
 echo "  kubectl logs -f deployment/api-deployment -n valodiscordhub"
 echo "  kubectl logs -f deployment/bot-deployment -n valodiscordhub"
+echo "  kubectl logs -f deployment/frontend-deployment -n valodiscordhub"
 echo ""
 echo "🌐 To access the API:"
 echo "  kubectl port-forward service/api-service 8000:8000 -n valodiscordhub"
+echo ""
+echo "🎨 To access the Frontend:"
+echo "  kubectl port-forward service/frontend-service 3000:80 -n valodiscordhub"
 echo ""
 echo "📝 To scale the API:"
 echo "  kubectl scale deployment api-deployment --replicas=3 -n valodiscordhub" 
