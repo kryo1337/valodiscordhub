@@ -11,7 +11,7 @@ if [ ! -f "../api/main.py" ] || [ ! -f "../bot/bot.py" ] || [ ! -f "../frontend/
 fi
 
 # Set docker environment to minikube
-eval $(minikube docker-env 2>/dev/null || minikube docker-env)
+eval $(minikube docker-env --shell=bash)
 
 # Build images
 echo "🐳 Building Docker images..."

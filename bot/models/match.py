@@ -21,6 +21,14 @@ class Match(BaseModel):
     @computed_field
     @property
     def duration(self) -> Optional[timedelta]:
-        if self.ended_at:
-            return self.ended_at - self.created_at
-        return None
+        if not self.ended_at:
+            return None
+
+        def ensure_aware_utc(dt: datetime) -> datetime:
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+
+        ended_at_aware = ensure_aware_utc(self.ended_at)
+        created_at_aware = ensure_aware_utc(self.created_at)
+        return ended_at_aware - created_at_aware

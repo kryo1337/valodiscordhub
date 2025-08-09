@@ -7,13 +7,6 @@ from typing import List
 
 router = APIRouter(prefix="/matches", tags=["matches"])
 
-@router.get("/{match_id}", response_model=Match)
-async def get_match(match_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
-    doc = await db.matches.find_one({"match_id": match_id})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Match not found")
-    return Match(**doc)
-
 @router.get("/history", response_model=List[Match])
 async def get_match_history(limit: int = Query(10, ge=1, le=100), db: AsyncIOMotorDatabase = Depends(get_db)):
     cursor = db.matches.find().sort("created_at", -1).limit(limit)
@@ -32,6 +25,13 @@ async def create_match(match: Match = Body(...), db: AsyncIOMotorDatabase = Depe
         raise HTTPException(status_code=409, detail="Match already exists")
     await db.matches.insert_one(match.dict())
     return match
+
+@router.get("/{match_id}", response_model=Match)
+async def get_match(match_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
+    doc = await db.matches.find_one({"match_id": match_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Match not found")
+    return Match(**doc)
 
 @router.patch("/{match_id}", response_model=Match, dependencies=[Depends(require_bot_token)])
 async def update_match(match_id: str, update: dict = Body(...), db: AsyncIOMotorDatabase = Depends(get_db)):

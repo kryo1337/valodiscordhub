@@ -13,6 +13,8 @@ from utils.db import (
     remove_player_from_queue,
     create_player,
     update_queue,
+    clear_queue,
+    delete_test_bots,
     is_player_banned,
     is_player_timeout,
 )
@@ -128,10 +130,19 @@ class QueueView(discord.ui.View):
                 await create_match(interaction.guild, self.rank_group, matched_players)
 
         except Exception as e:
-            await interaction.response.send_message(
-                f"An error occurred: {str(e)}",
-                ephemeral=True
-            )
+            try:
+                if interaction.response.is_done():
+                    await interaction.followup.send(
+                        f"An error occurred: {str(e)}",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.response.send_message(
+                        f"An error occurred: {str(e)}",
+                        ephemeral=True
+                    )
+            except Exception as send_err:
+                logger.error(f"Failed to send error response: {send_err}")
 
 class QueueCog(commands.Cog):
     def __init__(self, bot):
@@ -366,6 +377,50 @@ class QueueCog(commands.Cog):
         await interaction.followup.send(
             "✅ Queue channels have been set up!", ephemeral=True
         )
+
+    @app_commands.command(name="clear_queue")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.describe(
+        rank_group="Queue to clear (iron-plat, dia-asc, imm-radiant, or all)",
+        remove_bots="Also delete test_user_* players"
+    )
+    async def clear_queue_cmd(
+        self,
+        interaction: discord.Interaction,
+        rank_group: str = "all",
+        remove_bots: bool = True,
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        valid_groups = ["iron-plat", "dia-asc", "imm-radiant"]
+        groups = valid_groups if rank_group == "all" else [rank_group]
+        for group in groups:
+            if group not in valid_groups:
+                await interaction.followup.send(f"❌ Invalid rank_group: {group}", ephemeral=True)
+                return
+
+        cleared = []
+        for group in groups:
+            try:
+                queue = await clear_queue(group)
+                cleared.append(group)
+                await self.update_queue_message(interaction.guild, group, queue)
+            except Exception as e:
+                await interaction.followup.send(f"❌ Failed to clear {group}: {e}", ephemeral=True)
+                return
+
+        bots_deleted = 0
+        if remove_bots:
+            try:
+                bots_deleted = await delete_test_bots()
+            except Exception as e:
+                await interaction.followup.send(f"⚠️ Failed to delete test bots: {e}", ephemeral=True)
+
+        msg = f"✅ Cleared queues: {', '.join(cleared)}"
+        if remove_bots:
+            msg += f" | Deleted test bots: {bots_deleted}"
+        await interaction.followup.send(msg, ephemeral=True)
 
     async def remove_player_from_all_queues(self, guild: discord.Guild, discord_id: str):
         rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]

@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Tuple, Dict
 from models.player import Player
 from models.queue import Queue, QueueEntry
 from models.match import Match
@@ -7,6 +7,7 @@ from models.preferences import UserPreferences
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from .api_client import api_client
+import time
 
 load_dotenv()
 
@@ -33,14 +34,25 @@ async def update_player_rank(discord_id: str, rank: str) -> Optional[Player]:
     except Exception:
         return None
 
+async def get_player_stats(discord_id: str, rank_group: Optional[str] = None) -> Optional[dict]:
+    try:
+        params = {"rank_group": rank_group} if rank_group else None
+        data = await api_client.get(f"/stats/{discord_id}", params)
+        return data
+    except Exception:
+        return None
+
 async def get_queue(rank_group: str) -> Queue:
     try:
         data = await api_client.get(f"/queue/{rank_group}")
         queue = Queue(**data)
-        filtered_players = [
-            p for p in queue.players 
-            if not await is_player_banned(p.discord_id) and not await is_player_timeout(p.discord_id)
-        ]
+        filtered_players = []
+        for p in queue.players:
+            if await is_player_banned(p.discord_id):
+                continue
+            if await is_player_timeout(p.discord_id):
+                continue
+            filtered_players.append(p)
         if len(filtered_players) != len(queue.players):
             queue.players = filtered_players
         return queue
@@ -54,8 +66,16 @@ async def update_queue(rank_group: str, players: List[QueueEntry]) -> Queue:
     ]
     
     queue = Queue(rank_group=rank_group, players=players)
-    data = await api_client.put(f"/queue/{rank_group}", queue.dict())
+    data = await api_client.put(f"/queue/{rank_group}", queue.model_dump(mode="json"))
     return Queue(**data)
+
+async def clear_queue(rank_group: str) -> Queue:
+    data = await api_client.delete(f"/queue/{rank_group}")
+    return Queue(**data)
+
+async def delete_test_bots() -> int:
+    data = await api_client.delete("/players/test-bots")
+    return data.get("deleted_count", 0)
 
 async def add_to_queue(rank_group: str, discord_id: str) -> Queue:
     if await is_player_banned(discord_id):
@@ -72,10 +92,6 @@ async def add_to_queue(rank_group: str, discord_id: str) -> Queue:
     return Queue(**data)
 
 async def remove_player_from_queue(rank_group: str, discord_id: str) -> Queue:
-    queue = await get_queue(rank_group)
-    if not any(p.discord_id == discord_id for p in queue.players):
-        raise ValueError("You are not in the queue")
-    
     entry_data = {"discord_id": discord_id}
     data = await api_client.post(f"/queue/{rank_group}/leave", entry_data)
     return Queue(**data)
@@ -154,7 +170,7 @@ async def get_leaderboard(rank_group: str) -> Leaderboard:
 
 async def update_leaderboard(rank_group: str, players: List[LeaderboardEntry]) -> Leaderboard:
     leaderboard = Leaderboard(rank_group=rank_group, players=players)
-    data = await api_client.put(f"/leaderboard/{rank_group}", leaderboard.dict())
+    data = await api_client.put(f"/leaderboard/{rank_group}", leaderboard.model_dump(mode="json"))
     return Leaderboard(**data)
 
 async def get_player_rank(rank_group: str, discord_id: str) -> Optional[LeaderboardEntry]:
@@ -197,19 +213,33 @@ async def get_timeout_players() -> List[dict]:
     except Exception:
         return []
 
+_BAN_CACHE: Dict[str, Tuple[bool, float]] = {}
+_TIMEOUT_CACHE: Dict[str, Tuple[bool, float]] = {}
+_SANCTION_TTL_SECONDS = 60.0
+
 async def is_player_banned(discord_id: str) -> bool:
+    now = time.monotonic()
+    cached = _BAN_CACHE.get(discord_id)
+    if cached and (now < cached[1]):
+        return cached[0]
     try:
         data = await api_client.get(f"/admin/check-ban/{discord_id}")
-        return data
+        _BAN_CACHE[discord_id] = (bool(data), now + _SANCTION_TTL_SECONDS)
+        return bool(data)
     except Exception:
-        return False
+        return cached[0] if cached else False
 
 async def is_player_timeout(discord_id: str) -> bool:
+    now = time.monotonic()
+    cached = _TIMEOUT_CACHE.get(discord_id)
+    if cached and (now < cached[1]):
+        return cached[0]
     try:
         data = await api_client.get(f"/admin/check-timeout/{discord_id}")
-        return data
+        _TIMEOUT_CACHE[discord_id] = (bool(data), now + _SANCTION_TTL_SECONDS)
+        return bool(data)
     except Exception:
-        return False
+        return cached[0] if cached else False
 
 async def add_admin_log(action: str, admin_discord_id: str, target_discord_id: Optional[str] = None, 
                  match_id: Optional[str] = None, reason: Optional[str] = None, 

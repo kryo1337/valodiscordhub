@@ -33,3 +33,8 @@ async def update_player(discord_id: str, update: dict = Body(...), db: AsyncIOMo
         raise HTTPException(status_code=404, detail="Player not found")
     doc = await db.players.find_one({"discord_id": discord_id})
     return Player(**doc)
+
+@router.delete("/test-bots", dependencies=[Depends(require_bot_token)])
+async def delete_test_bots(db: AsyncIOMotorDatabase = Depends(get_db)):
+    result = await db.players.delete_many({"discord_id": {"$regex": "^test_user_"}})
+    return {"deleted_count": result.deleted_count}

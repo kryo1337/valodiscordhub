@@ -61,7 +61,10 @@ class AdminCog(commands.Cog):
 
     async def update_leaderboard_points(self, match_id: str, winner: str):
         match = await get_match(match_id)
-        
+        if not match or not match.players_red or not match.players_blue:
+            logger.error(f"update_leaderboard_points: match not found or malformed for {match_id}")
+            return
+
         first_player = await get_player(match.players_red[0])
         if not first_player or not first_player.rank:
             return
@@ -125,7 +128,13 @@ class AdminCog(commands.Cog):
 
         leaderboard_cog = self.bot.get_cog("LeaderboardCog")
         if leaderboard_cog:
-            await leaderboard_cog.update_leaderboard()
+            guild = self.bot.get_guild(GUILD_ID)
+            if guild:
+                category = discord.utils.get(guild.categories, name="valohub")
+                if category:
+                    channel = discord.utils.get(category.channels, name="leaderboard")
+                    if channel:
+                        await leaderboard_cog.update_leaderboard_display(channel)
 
     @app_commands.command(name="set_result")
     @app_commands.default_permissions(administrator=True)
@@ -149,6 +158,9 @@ class AdminCog(commands.Cog):
         match = await get_match(match_id)
         if not match:
             await interaction.followup.send("Match not found!", ephemeral=True)
+            return
+        if match.players_red is None or match.players_blue is None:
+            await interaction.followup.send("Match data incomplete; cannot set result.", ephemeral=True)
             return
 
         if result != "cancelled":
@@ -256,7 +268,13 @@ class AdminCog(commands.Cog):
 
         leaderboard_cog = self.bot.get_cog("LeaderboardCog")
         if leaderboard_cog:
-            await leaderboard_cog.update_leaderboard()
+            guild = self.bot.get_guild(GUILD_ID)
+            if guild:
+                category = discord.utils.get(guild.categories, name="valohub")
+                if category:
+                    channel = discord.utils.get(category.channels, name="leaderboard")
+                    if channel:
+                        await leaderboard_cog.update_leaderboard_display(channel)
 
     async def cleanup_match_channels(self, guild: discord.Guild, match_id: str):
         try:

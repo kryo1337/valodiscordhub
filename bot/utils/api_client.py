@@ -25,8 +25,11 @@ class APIClient:
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
+                status = e.response.status_code
+                if status == 404:
                     raise ValueError(f"Resource not found: {endpoint}")
+                if status == 429:
+                    raise ValueError("Too many requests. Please try again shortly.")
                 raise
             except httpx.RequestError as e:
                 raise ConnectionError(f"Failed to connect to API: {e}")
@@ -43,8 +46,11 @@ class APIClient:
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 409:
+                status = e.response.status_code
+                if status == 409:
                     raise ValueError(f"Resource already exists: {endpoint}")
+                if status == 429:
+                    raise ValueError("Too many requests. Please try again shortly.")
                 raise
             except httpx.RequestError as e:
                 raise ConnectionError(f"Failed to connect to API: {e}")
@@ -61,8 +67,11 @@ class APIClient:
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
+                status = e.response.status_code
+                if status == 404:
                     raise ValueError(f"Resource not found: {endpoint}")
+                if status == 429:
+                    raise ValueError("Too many requests. Please try again shortly.")
                 raise
             except httpx.RequestError as e:
                 raise ConnectionError(f"Failed to connect to API: {e}")
@@ -79,8 +88,11 @@ class APIClient:
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
+                status = e.response.status_code
+                if status == 404:
                     raise ValueError(f"Resource not found: {endpoint}")
+                if status == 429:
+                    raise ValueError("Too many requests. Please try again shortly.")
                 raise
             except httpx.RequestError as e:
                 raise ConnectionError(f"Failed to connect to API: {e}")
@@ -96,8 +108,11 @@ class APIClient:
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
+                status = e.response.status_code
+                if status == 404:
                     raise ValueError(f"Resource not found: {endpoint}")
+                if status == 429:
+                    raise ValueError("Too many requests. Please try again shortly.")
                 raise
             except httpx.RequestError as e:
                 raise ConnectionError(f"Failed to connect to API: {e}")

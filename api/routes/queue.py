@@ -41,3 +41,13 @@ async def update_queue(rank_group: str, queue: Queue = Body(...), db: AsyncIOMot
     )
     doc = await db.queues.find_one({"rank_group": rank_group})
     return Queue(**doc)
+
+@router.delete("/{rank_group}", dependencies=[Depends(require_bot_token)])
+async def clear_queue(rank_group: str, db: AsyncIOMotorDatabase = Depends(get_db)):
+    await db.queues.update_one(
+        {"rank_group": rank_group},
+        {"$set": {"players": []}},
+        upsert=True
+    )
+    doc = await db.queues.find_one({"rank_group": rank_group})
+    return Queue(**doc)

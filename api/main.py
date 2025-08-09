@@ -20,9 +20,19 @@ app.add_middleware(
 RATE_LIMIT = 60
 RATE_PERIOD = 60
 rate_limit_cache = {}
+BOT_API_TOKEN = os.getenv("BOT_API_TOKEN")
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bot ") and BOT_API_TOKEN:
+            token = auth_header[4:]
+            if token == BOT_API_TOKEN:
+                response = await call_next(request)
+                if "server" in response.headers:
+                    del response.headers["server"]
+                return response
+
         ip = request.client.host
         now = int(time.time())
         window = now // RATE_PERIOD
@@ -48,6 +58,8 @@ from routes.matches import router as matches_router
 from routes.admin import router as admin_router
 from routes.queue import router as queue_router
 from routes.preferences import router as preferences_router
+from routes.stats import router as stats_router
+from routes.history import router as history_router
 from auth import router as auth_router
 
 app.include_router(players_router)
@@ -56,4 +68,6 @@ app.include_router(matches_router)
 app.include_router(admin_router)
 app.include_router(queue_router)
 app.include_router(preferences_router)
+app.include_router(stats_router)
+app.include_router(history_router)
 app.include_router(auth_router)

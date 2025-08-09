@@ -1,5 +1,6 @@
 import os
 import asyncio
+import aiohttp
 import discord
 import logging
 from discord.ext import commands
@@ -77,8 +78,20 @@ async def before_command(ctx):
 
 async def load_extensions():
     for filename in os.listdir("./cogs"):
-        if filename.endswith(".py"):
-            await bot.load_extension(f"cogs.{filename[:-3]}")
+        if not filename.endswith(".py"):
+            continue
+        extension_name = f"cogs.{filename[:-3]}"
+        if extension_name in bot.extensions:
+            try:
+                await bot.reload_extension(extension_name)
+            except Exception:
+                try:
+                    await bot.unload_extension(extension_name)
+                except Exception:
+                    pass
+                await bot.load_extension(extension_name)
+        else:
+            await bot.load_extension(extension_name)
 
 @bot.event
 async def on_ready():
@@ -95,9 +108,18 @@ async def on_ready():
         logger.error(f"Failed to sync slash commands: {e}")
 
 async def main():
-    async with bot:
-        await load_extensions()
-        await bot.start(TOKEN)
+    backoff_seconds = 5
+    while True:
+        try:
+            async with bot:
+                await load_extensions()
+                await bot.start(TOKEN)
+        except (aiohttp.ClientConnectorError, aiohttp.ClientConnectorDNSError) as e:
+            logger.error(f"Discord connect failed: {e}; retrying in {backoff_seconds}s")
+        except Exception as e:
+            logger.error(f"Bot crashed: {e}; retrying in {backoff_seconds}s")
+        await asyncio.sleep(backoff_seconds)
+        backoff_seconds = min(backoff_seconds * 2, 300)
 
 if __name__ == "__main__":
     asyncio.run(main())
