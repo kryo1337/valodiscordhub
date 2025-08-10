@@ -194,7 +194,15 @@ async def get_total_pages(rank_group: str, page_size: int = 10) -> int:
 async def get_match_history(limit: Optional[int] = 10) -> List[Match]:
     try:
         params = {"limit": limit} if limit is not None else {}
-        data = await api_client.get("/matches/history", params)
+        data = await api_client.get("/history/matches", params)
+        return [Match(**match) for match in data]
+    except Exception:
+        return []
+
+async def get_player_match_history(discord_id: str, limit: Optional[int] = 10) -> List[Match]:
+    try:
+        params = {"limit": limit} if limit is not None else {}
+        data = await api_client.get(f"/history/matches/player/{discord_id}", params)
         return [Match(**match) for match in data]
     except Exception:
         return []

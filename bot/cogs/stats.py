@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from utils.db import get_player_rank, get_leaderboard_page, get_player
+from utils.db import get_player_rank, get_leaderboard_page, get_player, get_player_match_history
 import os
 from dotenv import load_dotenv
 
@@ -85,6 +85,7 @@ class StatsCog(commands.Cog):
         view = discord.ui.View(timeout=None)
         view.add_item(ShowMyStatsButton(self))
         view.add_item(SearchStatsButton(self))
+        view.add_item(ShowHistoryButton(self))
         await channel.send(embed=embed, view=view)
 
 class ShowMyStatsButton(discord.ui.Button):
@@ -181,6 +182,90 @@ class SearchStatsButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         modal = SearchStatsModal(self.cog)
         await interaction.response.send_modal(modal)
+
+class ShowHistoryButton(discord.ui.Button):
+    def __init__(self, cog):
+        super().__init__(
+            label="Show History",
+            style=discord.ButtonStyle.success,
+            emoji="📜",
+            custom_id="show_history"
+        )
+        self.cog = cog
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        target_user = interaction.user
+        target_id = str(target_user.id)
+        db_player = await get_player(target_id)
+        if not db_player:
+            await interaction.followup.send(f"{target_user.mention} is not registered!", ephemeral=True)
+            return
+
+        matches = await get_player_match_history(target_id, limit=10)
+        if not matches:
+            await interaction.followup.send(f"{target_user.mention} hasn't played any matches yet!", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title=f"Match History - {target_user.display_name}",
+            description=f"Recent {len(matches)} matches",
+            color=discord.Color.dark_theme()
+        )
+
+        for match in matches:
+            if match.result == "cancelled":
+                continue
+
+            red_team = [f"<@{id}>" for id in match.players_red]
+            blue_team = [f"<@{id}>" for id in match.players_blue]
+            
+            red_team[0] = f"{red_team[0]} 👑"
+            blue_team[0] = f"{blue_team[0]} 👑"
+            
+            red_team_str = f"**{', '.join(red_team)}**" if match.result == "red" else f"{', '.join(red_team)}"
+            blue_team_str = f"**{', '.join(blue_team)}**" if match.result == "blue" else f"{', '.join(blue_team)}"
+            
+            duration = match.duration
+            if duration:
+                hours, remainder = divmod(duration.seconds, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                duration_str = f"{hours}h {minutes}m {seconds}s"
+            else:
+                duration_str = "N/A"
+            
+            rank_group_display = {
+                "iron-plat": "Iron - Platinum",
+                "dia-asc": "Diamond - Ascendant",
+                "imm-radiant": "Immortal - Radiant"
+            }
+
+            red_side = "⚔️ Attack" if match.defense_start == "blue" else "🛡️ Defense"
+            blue_side = "⚔️ Attack" if match.defense_start == "red" else "🛡️ Defense"
+            
+            user_team = "🔴 Red" if target_id in match.players_red else "🔵 Blue"
+            user_side = red_side if target_id in match.players_red else blue_side
+            user_result = "✅ Won" if (
+                (match.result == "red" and target_id in match.players_red) or
+                (match.result == "blue" and target_id in match.players_blue)
+            ) else "❌ Lost"
+            
+            embed.add_field(
+                name=f"Match {match.match_id}",
+                value=(
+                    f"**Rank Group:** {rank_group_display[match.rank_group]}\n"
+                    f"**🔴 Red Team:** {red_team_str}\n"
+                    f"**🔵 Blue Team:** {blue_team_str}\n"
+                    f"**Result:** {user_result}\n"
+                    f"**Score:** {match.red_score}-{match.blue_score}\n"
+                    f"**Duration:** {duration_str}\n"
+                    f"**Date:** {match.created_at.strftime('%Y-%m-%d %H:%M')}"
+                ),
+                inline=False
+            )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 class SearchStatsModal(discord.ui.Modal, title="Search Player Stats"):
     def __init__(self, cog):

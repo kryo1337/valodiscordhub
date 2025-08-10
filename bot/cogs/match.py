@@ -92,7 +92,10 @@ class TeamSelectionView(discord.ui.View):
 
             async def select_callback(interaction: discord.Interaction):
                 if str(interaction.user.id) != current_captain:
-                    await interaction.response.send_message("It's not your turn to select!", ephemeral=True)
+                    if str(interaction.user.id) in self.captains:
+                        await interaction.response.send_message("It's not your turn to select!", ephemeral=True)
+                    else:
+                        await interaction.response.send_message("❌ You are not a captain! Only captains can select players.", ephemeral=True)
                     return
                 selected_id = select_menu.values[0]
                 if self.timeout_task:

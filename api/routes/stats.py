@@ -13,9 +13,14 @@ async def get_player_stats(
     rank_group: Optional[RankGroup] = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
+    player_doc = await db.players.find_one({"discord_id": discord_id})
+    if not player_doc:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
     groups = [rank_group] if rank_group else ["iron-plat", "dia-asc", "imm-radiant"]
     lb_entry = None
     resolved_group: Optional[str] = None
+    
     for g in groups:
         doc = await db.leaderboards.find_one({"rank_group": g})
         if not doc or "players" not in doc:
@@ -28,45 +33,14 @@ async def get_player_stats(
         if lb_entry:
             break
 
-    wins = 0
-    losses = 0
-    total = 0
-    async for m in db.matches.find({"$or": [
-        {"players_red": discord_id},
-        {"players_blue": discord_id}
-    ]}):
-        # normalize players list search above; motor won't match scalar in array unless equality; we need $in
-        pass
-
-    async for m in db.matches.find({"$or": [
-        {"players_red": {"$in": [discord_id]}},
-        {"players_blue": {"$in": [discord_id]}}
-    ]}):
-        result = m.get("result")
-        if result is None or result == "cancelled":
-            continue
-        is_red = discord_id in m.get("players_red", [])
-        is_blue = discord_id in m.get("players_blue", [])
-        if not (is_red or is_blue):
-            continue
-        total += 1
-        if (result == "red" and is_red) or (result == "blue" and is_blue):
-            wins += 1
-        else:
-            losses += 1
-
-    winrate = (wins / total * 100.0) if total > 0 else 0.0
-
-    player_doc = await db.players.find_one({"discord_id": discord_id})
-
     return {
         "discord_id": discord_id,
         "rank_group": resolved_group,
-        "rank": (player_doc or {}).get("rank"),
-        "points": (lb_entry or {}).get("points"),
-        "matches_played": total,
-        "wins": wins,
-        "losses": losses,
-        "winrate": round(winrate, 2),
-        "streak": (lb_entry or {}).get("streak"),
+        "rank": player_doc.get("rank"),
+        "points": (lb_entry or {}).get("points", 1000),
+        "matches_played": (lb_entry or {}).get("matches_played", 0),
+        "wins": player_doc.get("wins", 0),
+        "losses": player_doc.get("losses", 0),
+        "winrate": (lb_entry or {}).get("winrate", 0.0),
+        "streak": (lb_entry or {}).get("streak", 0),
     }

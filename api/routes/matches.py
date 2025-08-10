@@ -7,12 +7,6 @@ from typing import List
 
 router = APIRouter(prefix="/matches", tags=["matches"])
 
-@router.get("/history", response_model=List[Match])
-async def get_match_history(limit: int = Query(10, ge=1, le=100), db: AsyncIOMotorDatabase = Depends(get_db)):
-    cursor = db.matches.find().sort("created_at", -1).limit(limit)
-    matches = [Match(**doc) async for doc in cursor]
-    return matches
-
 @router.get("/active", response_model=List[Match])
 async def get_active_matches(db: AsyncIOMotorDatabase = Depends(get_db)):
     cursor = db.matches.find({"result": None})

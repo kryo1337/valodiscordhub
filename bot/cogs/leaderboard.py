@@ -286,7 +286,14 @@ class LeaderboardCog(commands.Cog):
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         players = sorted_players[start_idx:end_idx]
-        total_pages = (len(sorted_players) + page_size - 1) // page_size
+        total_pages = max(1, (len(sorted_players) + page_size - 1) // page_size)
+        
+        if page > total_pages:
+            user_prefs.page = total_pages
+            page = total_pages
+        elif page < 1:
+            user_prefs.page = 1
+            page = 1
 
         rank_group_colors = {
             "iron-plat": discord.Color.blue(),
@@ -322,6 +329,9 @@ class LeaderboardCog(commands.Cog):
 
         embed.set_footer(text=f"📄 Page {page}/{total_pages} | 👥 {page_size} players per page")
 
+        if view:
+            view.total_pages = total_pages
+            
         if view and view.message:
             await view.message.edit(embed=embed, view=view)
         else:
