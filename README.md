@@ -1,12 +1,12 @@
 # ValoDiscordHub
 
-A full-stack Discord bot + web platform for Valorant matchmaking, stats, and team management (think FACEIT, but for Discord).
+A Discord bot + REST API platform for Valorant matchmaking, stats, and team management (think FACEIT, but for Discord).
 
 ## Features
 
 ### Queue
 - Rank-based queue channels (Iron-Plat, Diamond-Ascendant, Immortal-Radiant)
-- Role selection UI (Discord + Web)
+- Role selection UI (Discord)
 - Queue status, player count, and live updates
 - Auto-timeout for inactive players
 
@@ -15,9 +15,9 @@ A full-stack Discord bot + web platform for Valorant matchmaking, stats, and tea
 </p>
 
 ### Match
-- Captain-based team selection (Discord + Web)
+- Captain-based team selection (Discord)
 - Side selection (Attack/Defense), auto voice channel assignment
-- Score submission (with validation, Discord + Web)
+- Score submission (with validation, Discord)
 - Match results, stats, and auto-cleanup
 
 <p align="center">
@@ -31,7 +31,7 @@ Score Submission:
 </p>
 
 ### Rank
-- Riot ID verification (Discord + Web)
+- Riot ID verification (Discord)
 - Auto rank role assignment
 - Rank updates, tracking, and group categorization
 
@@ -40,7 +40,7 @@ Score Submission:
 </p>
 
 ### Leaderboard
-- Global and rank-specific leaderboards (Discord + Web)
+- Global and rank-specific leaderboards (Discord)
 - Points, stats, paginated display
 
 <p align="center">
@@ -72,14 +72,13 @@ Score Submission:
 
 ## Architecture
 
-- **Discord Bot**: Python, discord.py, handles all Discord-side logicy
-- **REST API**: FastAPI (Python), exposes endpoints for bot, web, and integrations
-- **Frontend**: React (Vite), full-featured dashboard for queueing, stats, admin, etc.
+- **Discord Bot**: Python, discord.py, handles all Discord-side logic
+- **REST API**: FastAPI (Python), exposes endpoints for bot and integrations
 - **Database**: MongoDB (Atlas or self-hosted)
-- **Containerization**: Docker for all services (bot, API, frontend, db)
+- **Containerization**: Docker for all services (bot, API, db)
 - **Orchestration**: Kubernetes (Helm charts, manifests for scaling, rolling updates, secrets)
 - **CI/CD**: GitHub Actions (build, test, deploy to K8s cluster)
-- **Reverse Proxy**: NGINX (ingress for API + frontend)
+- **Reverse Proxy**: NGINX (ingress for API)
 - **Monitoring**: Prometheus + Grafana (optional, for metrics/logs)
 
 ---
@@ -88,7 +87,6 @@ Score Submission:
 
 - **Bot**: Python, discord.py
 - **API**: FastAPI
-- **Frontend**: React (Vite, TypeScript)
 - **DB**: MongoDB
 - **Containerization**: Docker
 - **Orchestration**: Kubernetes
