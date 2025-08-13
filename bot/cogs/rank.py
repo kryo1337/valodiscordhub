@@ -91,8 +91,7 @@ class RankModal(discord.ui.Modal, title="Enter your Riot ID"):
                 rate_limiter.update_cooldown(user_id, "rank")
                 
                 await interaction.followup.send(
-                    f"✅ Rank verification request submitted!\n"
-                    f"An admin will review your request in {ticket_channel.mention} and assign your rank.",
+                    f"✅ Rank verification request submitted!",
                     ephemeral=True
                 )
             else:
@@ -178,8 +177,6 @@ class RankSelectionModal(discord.ui.Modal, title="Select Rank"):
             if role_assigned:
                 success_embed.add_field(name="Role Assigned", value=f"✅ {role_name}", inline=False)
 
-            await interaction.followup.send(embed=success_embed, ephemeral=True)
-
             try:
                 user_embed = discord.Embed(
                     title="🎮 Rank Approved!",
@@ -192,6 +189,28 @@ class RankSelectionModal(discord.ui.Modal, title="Select Rank"):
                 
                 await self.user.send(embed=user_embed)
             except:
+                pass
+
+            try:
+                public_embed = discord.Embed(
+                    title="✅ Rank Approved",
+                    description=(
+                        f"**User:** {self.user.mention}\n"
+                        f"**Riot ID:** {self.riot_id}\n"
+                        f"**Rank:** {rank}"
+                    ),
+                    color=discord.Color.green()
+                )
+                if role_assigned:
+                    public_embed.add_field(name="Role Assigned", value=f"✅ {role_name}", inline=False)
+                public_embed.add_field(name="Assigned By", value=interaction.user.mention, inline=False)
+
+                category = interaction.guild and discord.utils.get(interaction.guild.categories, name="valohub")
+                admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks") if category else None
+                target_channel = admin_ranks_channel or (self.message.channel if hasattr(self, "message") else None)
+                if target_channel:
+                    await target_channel.send(embed=public_embed)
+            except Exception:
                 pass
 
             await self.message.delete()
@@ -233,7 +252,7 @@ class RankSelectionModal(discord.ui.Modal, title="Select Rank"):
 
 class RankSelectionView(discord.ui.View):
     def __init__(self, user: discord.Member, riot_id: str, message: discord.Message):
-        super().__init__(timeout=300)  # 5 minutes timeout
+        super().__init__(timeout=300)
         self.user = user
         self.riot_id = riot_id
         self.message = message
@@ -301,8 +320,6 @@ class RankSelectionView(discord.ui.View):
             if role_assigned:
                 success_embed.add_field(name="Role Assigned", value=f"✅ {role_name}", inline=False)
 
-            await interaction.followup.send(embed=success_embed, ephemeral=True)
-
             try:
                 user_embed = discord.Embed(
                     title="🎮 Rank Approved!",
@@ -315,6 +332,28 @@ class RankSelectionView(discord.ui.View):
                 
                 await self.user.send(embed=user_embed)
             except:
+                pass
+
+            try:
+                public_embed = discord.Embed(
+                    title="✅ Rank Approved",
+                    description=(
+                        f"**User:** {self.user.mention}\n"
+                        f"**Riot ID:** {self.riot_id}\n"
+                        f"**Rank:** {rank}"
+                    ),
+                    color=discord.Color.green()
+                )
+                if role_assigned:
+                    public_embed.add_field(name="Role Assigned", value=f"✅ {role_name}", inline=False)
+                public_embed.add_field(name="Assigned By", value=interaction.user.mention, inline=False)
+
+                category = interaction.guild and discord.utils.get(interaction.guild.categories, name="valohub")
+                admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks") if category else None
+                target_channel = admin_ranks_channel or (self.message.channel if hasattr(self, "message") else None)
+                if target_channel:
+                    await target_channel.send(embed=public_embed)
+            except Exception:
                 pass
 
             await self.message.delete()
@@ -382,22 +421,29 @@ class RejectionModal(discord.ui.Modal, title="Reject Rank Request"):
                 )
                 user_embed.add_field(name="Riot ID", value=self.riot_id, inline=False)
                 user_embed.add_field(name="Reason", value=self.reason.value, inline=False)
-                user_embed.add_field(
-                    name="Next Steps", 
-                    value="Please verify your Riot ID and try again. Make sure your profile is public on tracker.gg",
-                    inline=False
-                )
                 
                 await self.user.send(embed=user_embed)
             except:
                 pass
 
-            admin_embed = discord.Embed(
-                title="❌ Rank Request Rejected",
-                description=f"**User:** {self.user.mention}\n**Riot ID:** {self.riot_id}\n**Reason:** {self.reason.value}",
-                color=discord.Color.red()
-            )
-            await interaction.followup.send(embed=admin_embed, ephemeral=True)
+            try:
+                public_embed = discord.Embed(
+                    title="❌ Rank Request Rejected",
+                    description=(
+                        f"**User:** {self.user.mention}\n"
+                        f"**Riot ID:** {self.riot_id}\n"
+                        f"**Reason:** {self.reason.value}"
+                    ),
+                    color=discord.Color.red()
+                )
+                public_embed.add_field(name="Rejected By", value=interaction.user.mention, inline=False)
+                category = interaction.guild and discord.utils.get(interaction.guild.categories, name="valohub")
+                admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks") if category else None
+                target_channel = admin_ranks_channel or (self.message.channel if hasattr(self, "message") else None)
+                if target_channel:
+                    await target_channel.send(embed=public_embed)
+            except Exception:
+                pass
 
             await self.message.delete()
 
@@ -491,6 +537,25 @@ class Rank(commands.Cog):
 
         channel = discord.utils.get(category.channels, name="rank")
         if channel:
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=False
+                ),
+                guild.me: discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    manage_channels=True
+                ),
+            }
+            for role_name in ["iron-plat", "dia-asc", "imm-radiant"]:
+                role = discord.utils.get(guild.roles, name=role_name)
+                if role:
+                    overwrites[role] = discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=False
+                    )
+            await channel.edit(overwrites=overwrites)
             async for message in channel.history(limit=None):
                 try:
                     await message.delete()

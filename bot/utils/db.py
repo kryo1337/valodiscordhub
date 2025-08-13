@@ -47,11 +47,15 @@ async def get_queue(rank_group: str) -> Queue:
         data = await api_client.get(f"/queue/{rank_group}")
         queue = Queue(**data)
         filtered_players = []
+        seen_ids = set()
         for p in queue.players:
+            if p.discord_id in seen_ids:
+                continue
             if await is_player_banned(p.discord_id):
                 continue
             if await is_player_timeout(p.discord_id):
                 continue
+            seen_ids.add(p.discord_id)
             filtered_players.append(p)
         if len(filtered_players) != len(queue.players):
             queue.players = filtered_players

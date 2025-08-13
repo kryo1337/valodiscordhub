@@ -15,9 +15,12 @@ async def get_queue(rank_group: str, db: AsyncIOMotorDatabase = Depends(get_db))
 
 @router.post("/{rank_group}/join", response_model=Queue, dependencies=[Depends(require_bot_token)])
 async def join_queue(rank_group: str, entry: QueueEntry = Body(...), db: AsyncIOMotorDatabase = Depends(get_db)):
-    result = await db.queues.update_one(
-        {"rank_group": rank_group},
-        {"$addToSet": {"players": entry.dict()}},
+    await db.queues.update_one(
+        {
+            "rank_group": rank_group,
+            "players": {"$not": {"$elemMatch": {"discord_id": entry.discord_id}}}
+        },
+        {"$push": {"players": entry.dict()}},
         upsert=True
     )
     doc = await db.queues.find_one({"rank_group": rank_group})

@@ -440,6 +440,8 @@ class ScoreSubmissionView(discord.ui.View):
         self.last_submission_time = 0
         self.message = None
         self.admin_called = False
+        self.admin_called_by: Optional[str] = None
+        self.admin_called_at: Optional[int] = None
 
     @discord.ui.button(label="Submit Red Team Score", style=discord.ButtonStyle.danger)
     async def submit_red_score(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -519,6 +521,7 @@ class ScoreSubmissionView(discord.ui.View):
             description=f"Match ID: {self.match_id}",
             color=discord.Color.red()
         )
+        embed.timestamp = datetime.utcnow()
         embed.add_field(
             name="Teams",
             value=(
@@ -544,10 +547,15 @@ class ScoreSubmissionView(discord.ui.View):
         message = await admin_cog.send_admin_report(self.match_id, interaction.channel_id, embed)
         if message:
             self.admin_called = True
+            self.admin_called_by = str(interaction.user.id)
+            self.admin_called_at = int(time.time())
             if self.message:
                 button.disabled = True
                 await self.message.edit(view=self)
-            await interaction.response.send_message("⚠️ Admin has been called for this match!", ephemeral=False)
+            await interaction.response.send_message(
+                f"⚠️ Admin has been called by <@{interaction.user.id}>.",
+                ephemeral=False
+            )
         else:
             await interaction.response.send_message("Failed to send admin report!", ephemeral=True)
 
@@ -599,7 +607,10 @@ class ScoreSubmissionView(discord.ui.View):
         if self.admin_called:
             embed.add_field(
                 name="⚠️ Admin Status",
-                value="An admin has been called to review this match",
+                value=(
+                    f"An admin has been called to review this match\n"
+                    f"Called by: <@{self.admin_called_by}> at <t:{self.admin_called_at}:F>"
+                ),
                 inline=False
             )
 

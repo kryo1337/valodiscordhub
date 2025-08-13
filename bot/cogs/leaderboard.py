@@ -190,6 +190,26 @@ class LeaderboardCog(commands.Cog):
 
         channel = discord.utils.get(category.channels, name="leaderboard")
         if channel:
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(
+                    view_channel=False,
+                    send_messages=False
+                ),
+                guild.me: discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    manage_channels=True
+                ),
+            }
+            for role_name in ["iron-plat", "dia-asc", "imm-radiant"]:
+                role = discord.utils.get(guild.roles, name=role_name)
+                if role:
+                    overwrites[role] = discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=False
+                    )
+            await channel.edit(overwrites=overwrites)
+
             async for message in channel.history(limit=None):
                 try:
                     await message.delete()
@@ -219,7 +239,7 @@ class LeaderboardCog(commands.Cog):
 
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(
-                view_channel=True,
+                view_channel=False,
                 send_messages=False
             ),
             interaction.guild.me: discord.PermissionOverwrite(
@@ -228,6 +248,14 @@ class LeaderboardCog(commands.Cog):
                 manage_channels=True
             ),
         }
+
+        for role_name in ["iron-plat", "dia-asc", "imm-radiant"]:
+            role = discord.utils.get(interaction.guild.roles, name=role_name)
+            if role:
+                overwrites[role] = discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=False
+                )
 
         channel = await category.create_text_channel(
             name="leaderboard",

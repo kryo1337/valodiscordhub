@@ -28,6 +28,26 @@ class StatsCog(commands.Cog):
 
         channel = discord.utils.get(category.channels, name="stats")
         if channel:
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(
+                    view_channel=False,
+                    send_messages=False
+                ),
+                guild.me: discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    manage_channels=True
+                ),
+            }
+            for role_name in ["iron-plat", "dia-asc", "imm-radiant"]:
+                role = discord.utils.get(guild.roles, name=role_name)
+                if role:
+                    overwrites[role] = discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=False
+                    )
+            await channel.edit(overwrites=overwrites)
+
             self.stats_channels[channel.id] = True
             await self.update_stats_display(channel)
 
@@ -47,7 +67,7 @@ class StatsCog(commands.Cog):
 
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(
-                view_channel=True,
+                view_channel=False,
                 send_messages=False
             ),
             interaction.guild.me: discord.PermissionOverwrite(
