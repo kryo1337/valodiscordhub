@@ -115,9 +115,6 @@ class HistoryCog(commands.Cog):
             red_team[0] = f"{red_team[0]} 👑"
             blue_team[0] = f"{blue_team[0]} 👑"
             
-            red_team_str = f"**{', '.join(red_team)}**" if match.result == "red" else f"{', '.join(red_team)}"
-            blue_team_str = f"**{', '.join(blue_team)}**" if match.result == "blue" else f"{', '.join(blue_team)}"
-            
             duration = match.duration
             if duration:
                 hours, remainder = divmod(duration.seconds, 3600)
@@ -156,9 +153,10 @@ class HistoryCog(commands.Cog):
             embed.add_field(
                 name="Match Details",
                 value=(
-                    f"**Score:** {match.red_score}-{match.blue_score}\n"
-                    f"**Duration:** {duration_str}\n"
-                    f"**Winner:** {'🔴 Red Team' if match.result == 'red' else '🔵 Blue Team'}"
+                    f"Score: {match.red_score}-{match.blue_score}\n"
+                    f"Winner: {'🔴 Red Team' if match.result == 'red' else '🔵 Blue Team'}\n"
+                    f"Duration: {duration_str}\n"
+                    f"Date: {match.created_at.strftime('%Y-%m-%d %H:%M')}"
                 ),
                 inline=False
             )
@@ -177,9 +175,6 @@ class HistoryCog(commands.Cog):
             red_team[0] = f"👑 {red_team[0]}"
             blue_team[0] = f"👑 {blue_team[0]}"
             
-            red_team_str = f"**{', '.join(red_team)}**" if match.result == "red" else f"{', '.join(red_team)}"
-            blue_team_str = f"**{', '.join(blue_team)}**" if match.result == "blue" else f"{', '.join(blue_team)}"
-            
             duration = match.duration
             if duration:
                 hours, remainder = divmod(duration.seconds, 3600)
@@ -218,9 +213,10 @@ class HistoryCog(commands.Cog):
             embed.add_field(
                 name="Match Details",
                 value=(
-                    f"**Score:** {match.red_score}-{match.blue_score}\n"
-                    f"**Duration:** {duration_str}\n"
-                    f"**Winner:** {'🔴 Red Team' if match.result == 'red' else '🔵 Blue Team'}"
+                    f"Score: {match.red_score}-{match.blue_score}\n"
+                    f"Winner: {'🔴 Red Team' if match.result == 'red' else '🔵 Blue Team'}\n"
+                    f"Duration: {duration_str}\n"
+                    f"Date: {match.created_at.strftime('%Y-%m-%d %H:%M')}"
                 ),
                 inline=False
             )
@@ -300,9 +296,6 @@ class HistoryCog(commands.Cog):
             red_team[0] = f"{red_team[0]} 👑"
             blue_team[0] = f"{blue_team[0]} 👑"
             
-            red_team_str = f"**{', '.join(red_team)}**" if match.result == "red" else f"{', '.join(red_team)}"
-            blue_team_str = f"**{', '.join(blue_team)}**" if match.result == "blue" else f"{', '.join(blue_team)}"
-            
             duration = match.duration
             if duration:
                 hours, remainder = divmod(duration.seconds, 3600)
@@ -341,9 +334,10 @@ class HistoryCog(commands.Cog):
             embed.add_field(
                 name="Match Details",
                 value=(
-                    f"**Score:** {match.red_score}-{match.blue_score}\n"
-                    f"**Duration:** {duration_str}\n"
-                    f"**Winner:** {'🔴 Red Team' if match.result == 'red' else '🔵 Blue Team'}"
+                    f"Score: {match.red_score}-{match.blue_score}\n"
+                    f"Winner: {'🔴 Red Team' if match.result == 'red' else '🔵 Blue Team'}\n"
+                    f"Duration: {duration_str}\n"
+                    f"Date: {match.created_at.strftime('%Y-%m-%d %H:%M')}"
                 ),
                 inline=False
             )

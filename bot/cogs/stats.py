@@ -214,8 +214,35 @@ class ShowHistoryButton(discord.ui.Button):
         self.cog = cog
 
     async def callback(self, interaction: discord.Interaction):
+        modal = HistoryLimitModal()
+        await interaction.response.send_modal(modal)
+
+
+class HistoryLimitModal(discord.ui.Modal, title="Match History Limit"):
+    def __init__(self):
+        super().__init__()
+        self.limit_input = discord.ui.TextInput(
+            label="How many recent matches? (1-20)",
+            placeholder="Enter a number between 1 and 20",
+            required=True,
+            min_length=1,
+            max_length=2
+        )
+        self.add_item(self.limit_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        
+
+        try:
+            limit = int(str(self.limit_input.value).strip())
+        except ValueError:
+            await interaction.followup.send("❌ Please enter a valid number between 1 and 20.", ephemeral=True)
+            return
+
+        if limit < 1 or limit > 20:
+            await interaction.followup.send("❌ Number must be between 1 and 20.", ephemeral=True)
+            return
+
         target_user = interaction.user
         target_id = str(target_user.id)
         db_player = await get_player(target_id)
@@ -223,30 +250,21 @@ class ShowHistoryButton(discord.ui.Button):
             await interaction.followup.send(f"{target_user.mention} is not registered!", ephemeral=True)
             return
 
-        matches = await get_player_match_history(target_id, limit=10)
+        matches = await get_player_match_history(target_id, limit=limit)
         if not matches:
             await interaction.followup.send(f"{target_user.mention} hasn't played any matches yet!", ephemeral=True)
             return
 
-        embed = discord.Embed(
-            title=f"Match History - {target_user.display_name}",
-            description=f"Recent {len(matches)} matches",
-            color=discord.Color.dark_theme()
-        )
+        rank_group_display = {
+            "iron-plat": "Iron - Platinum",
+            "dia-asc": "Diamond - Ascendant",
+            "imm-radiant": "Immortal - Radiant"
+        }
 
         for match in matches:
             if match.result == "cancelled":
                 continue
 
-            red_team = [f"<@{id}>" for id in match.players_red]
-            blue_team = [f"<@{id}>" for id in match.players_blue]
-            
-            red_team[0] = f"{red_team[0]} 👑"
-            blue_team[0] = f"{blue_team[0]} 👑"
-            
-            red_team_str = f"**{', '.join(red_team)}**" if match.result == "red" else f"{', '.join(red_team)}"
-            blue_team_str = f"**{', '.join(blue_team)}**" if match.result == "blue" else f"{', '.join(blue_team)}"
-            
             duration = match.duration
             if duration:
                 hours, remainder = divmod(duration.seconds, 3600)
@@ -254,38 +272,51 @@ class ShowHistoryButton(discord.ui.Button):
                 duration_str = f"{hours}h {minutes}m {seconds}s"
             else:
                 duration_str = "N/A"
-            
-            rank_group_display = {
-                "iron-plat": "Iron - Platinum",
-                "dia-asc": "Diamond - Ascendant",
-                "imm-radiant": "Immortal - Radiant"
-            }
 
             red_side = "⚔️ Attack" if match.defense_start == "blue" else "🛡️ Defense"
             blue_side = "⚔️ Attack" if match.defense_start == "red" else "🛡️ Defense"
-            
-            user_team = "🔴 Red" if target_id in match.players_red else "🔵 Blue"
-            user_side = red_side if target_id in match.players_red else blue_side
             user_result = "✅ Won" if (
                 (match.result == "red" and target_id in match.players_red) or
                 (match.result == "blue" and target_id in match.players_blue)
             ) else "❌ Lost"
-            
+
+            embed = discord.Embed(
+                title=f"Match {match.match_id}",
+                description=f"Rank Group: {rank_group_display[match.rank_group]}",
+                color=discord.Color.dark_theme(),
+                timestamp=match.created_at
+            )
+
             embed.add_field(
-                name=f"Match {match.match_id}",
+                name=f"🔴 Red Team {red_side}",
                 value=(
-                    f"**Rank Group:** {rank_group_display[match.rank_group]}\n"
-                    f"**🔴 Red Team:** {red_team_str}\n"
-                    f"**🔵 Blue Team:** {blue_team_str}\n"
-                    f"**Result:** {user_result}\n"
-                    f"**Score:** {match.red_score}-{match.blue_score}\n"
-                    f"**Duration:** {duration_str}\n"
-                    f"**Date:** {match.created_at.strftime('%Y-%m-%d %H:%M')}"
+                    f"• Captain: <@{match.players_red[0]}>\n" +
+                    ("\n".join([f"• <@{pid}>" for pid in match.players_red[1:]]) if len(match.players_red) > 1 else "")
+                ),
+                inline=True
+            )
+
+            embed.add_field(
+                name=f"🔵 Blue Team {blue_side}",
+                value=(
+                    f"• Captain: <@{match.players_blue[0]}>\n" +
+                    ("\n".join([f"• <@{pid}>" for pid in match.players_blue[1:]]) if len(match.players_blue) > 1 else "")
+                ),
+                inline=True
+            )
+
+            embed.add_field(
+                name="Match Details",
+                value=(
+                    f"Score: {match.red_score}-{match.blue_score}\n"
+                    f"Result: {user_result}\n"
+                    f"Duration: {duration_str}\n"
+                    f"Date: {match.created_at.strftime('%Y-%m-%d %H:%M')}\n"
                 ),
                 inline=False
             )
 
-        await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
 class SearchStatsModal(discord.ui.Modal, title="Search Player Stats"):
     def __init__(self, cog):

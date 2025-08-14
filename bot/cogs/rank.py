@@ -34,7 +34,7 @@ VALID_RANKS = [
 class RankModal(discord.ui.Modal, title="Enter your Riot ID"):
     riot_id = discord.ui.TextInput(
         label="Riot ID",
-        placeholder="Enter your Riot ID (e.g. Player#EU1)",
+        placeholder="Enter your Riot ID (e.g. Player#1337)",
         required=True,
         min_length=3,
         max_length=20
@@ -130,7 +130,7 @@ class RankTicketView(discord.ui.View):
 class RankSelectionModal(discord.ui.Modal, title="Select Rank"):
     rank = discord.ui.TextInput(
         label="Rank",
-        placeholder="Enter rank (e.g. Diamond 1, Radiant)",
+        placeholder="Enter rank",
         required=True,
         min_length=2,
         max_length=20
@@ -396,7 +396,7 @@ class RankSelectionView(discord.ui.View):
 class RejectionModal(discord.ui.Modal, title="Reject Rank Request"):
     reason = discord.ui.TextInput(
         label="Reason for Rejection",
-        placeholder="Enter reason (e.g. Invalid Riot ID, Profile not found)",
+        placeholder="Enter reason",
         required=True,
         min_length=1,
         max_length=500,
@@ -571,7 +571,7 @@ class Rank(commands.Cog):
             embed.add_field(
                 name="📝 How it works",
                 value="1. Click the button below\n"
-                      "2. Enter your Riot ID (e.g. Player#EU1)\n"
+                      "2. Enter your Riot ID (e.g. Player#1337)\n"
                       "3. A ticket will be created for admin review\n"
                       "4. Admin will verify your rank and assign you the appropriate role",
                 inline=False
@@ -589,7 +589,6 @@ class Rank(commands.Cog):
                 name="⚠️ Important",
                 value="• Make sure your Riot ID is correct\n"
                       "• Your profile must be public on tracker.gg\n"
-                      "• Only admins can approve rank requests\n"
                       "• You'll receive a DM when your rank is approved",
                 inline=False
             )
@@ -651,7 +650,7 @@ class Rank(commands.Cog):
             embed.add_field(
                 name="📝 How it works",
                 value="1. Click the button below\n"
-                      "2. Enter your Riot ID (e.g. Player#EU1)\n"
+                      "2. Enter your Riot ID (e.g. Player#1337)\n"
                       "3. A ticket will be created for admin review\n"
                       "4. Admin will verify your rank and assign you the appropriate role",
                 inline=False
@@ -669,7 +668,6 @@ class Rank(commands.Cog):
                 name="⚠️ Important",
                 value="• Make sure your Riot ID is correct\n"
                       "• Your profile must be public on tracker.gg\n"
-                      "• Only admins can approve rank requests\n"
                       "• You'll receive a DM when your rank is approved",
                 inline=False
             )
