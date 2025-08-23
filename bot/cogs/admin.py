@@ -29,11 +29,11 @@ class AdminCog(commands.Cog):
         if not guild:
             return
 
-        category = discord.utils.get(guild.categories, name="valohub")
+        category = discord.utils.get(guild.categories, name="Staff")
         if not category:
             return
 
-        channel = discord.utils.get(category.channels, name="admin")
+        channel = discord.utils.get(category.channels, name="admin-panel")
         if channel:
             self.admin_channel_id = channel.id
 
@@ -130,7 +130,7 @@ class AdminCog(commands.Cog):
         if leaderboard_cog:
             guild = self.bot.get_guild(GUILD_ID)
             if guild:
-                category = discord.utils.get(guild.categories, name="valohub")
+                category = discord.utils.get(guild.categories, name="Hub")
                 if category:
                     channel = discord.utils.get(category.channels, name="leaderboard")
                     if channel:
@@ -270,7 +270,7 @@ class AdminCog(commands.Cog):
         if leaderboard_cog:
             guild = self.bot.get_guild(GUILD_ID)
             if guild:
-                category = discord.utils.get(guild.categories, name="valohub")
+                category = discord.utils.get(guild.categories, name="Hub")
                 if category:
                     channel = discord.utils.get(category.channels, name="leaderboard")
                     if channel:
@@ -304,11 +304,11 @@ class AdminCog(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        category = discord.utils.get(interaction.guild.categories, name="valohub")
+        category = discord.utils.get(interaction.guild.categories, name="Staff")
         if not category:
-            category = await interaction.guild.create_category("valohub")
+            category = await interaction.guild.create_category("Staff")
 
-        existing_channel = discord.utils.get(category.channels, name="admin")
+        existing_channel = discord.utils.get(category.channels, name="admin-panel")
         if existing_channel:
             await existing_channel.delete()
 
@@ -319,7 +319,7 @@ class AdminCog(commands.Cog):
 
         try:
             channel = await category.create_text_channel(
-                name="admin",
+                name="admin-panel",
                 overwrites=overwrites,
                 topic="Admin reports and notifications"
             )
@@ -690,6 +690,62 @@ class AdminCog(commands.Cog):
                 ephemeral=True
             )
 
+    @app_commands.command(name="setup_all")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def setup_all(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            await interaction.followup.send("🔧 Setting up admin channels...", ephemeral=True)
+            await self.setup_admin.callback(self, interaction)
+            
+            queue_cog = self.bot.get_cog("QueueCog")
+            if queue_cog:
+                await interaction.followup.send("🔧 Setting up queue channels...", ephemeral=True)
+                await queue_cog.setup_queue.callback(queue_cog, interaction)
+
+            leaderboard_cog = self.bot.get_cog("LeaderboardCog")
+            if leaderboard_cog:
+                await interaction.followup.send("🔧 Setting up leaderboard channel...", ephemeral=True)
+                await leaderboard_cog.setup_leaderboard.callback(leaderboard_cog, interaction)
+
+            rank_cog = self.bot.get_cog("Rank")
+            if rank_cog:
+                await interaction.followup.send("🔧 Setting up rank channel...", ephemeral=True)
+                await rank_cog.setup_rank.callback(rank_cog, interaction)
+
+            history_cog = self.bot.get_cog("HistoryCog")
+            if history_cog:
+                await interaction.followup.send("🔧 Setting up history channel...", ephemeral=True)
+                await history_cog.setup_history.callback(history_cog, interaction)
+
+            stats_cog = self.bot.get_cog("StatsCog")
+            if stats_cog:
+                await interaction.followup.send("🔧 Setting up stats channel...", ephemeral=True)
+                await stats_cog.setup_stats.callback(stats_cog, interaction)
+
+            await add_admin_log(
+                action="setup_all",
+                admin_discord_id=str(interaction.user.id),
+                reason="All channels set up"
+            )
+
+            await interaction.followup.send(
+                "✅ All channels have been set up successfully!\n"
+                "Categories created:\n"
+                "• **Staff**: admin, admin-ranks\n"
+                "• **Hub**: queues, leaderboard, history, rank, stats\n"
+                "• **Matches**: (will be created automatically when matches start)",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Failed to setup channels: {str(e)}",
+                ephemeral=True
+            )
+
     @app_commands.command(name="list_bans")
     @app_commands.default_permissions(administrator=True)
     @app_commands.guilds(discord.Object(id=GUILD_ID))
@@ -764,9 +820,9 @@ class AdminCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            category = discord.utils.get(interaction.guild.categories, name="valohub")
+            category = discord.utils.get(interaction.guild.categories, name="Staff")
             if not category:
-                await interaction.followup.send("❌ valohub category not found!", ephemeral=True)
+                await interaction.followup.send("❌ Staff category not found!", ephemeral=True)
                 return
 
             admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks")
@@ -774,7 +830,6 @@ class AdminCog(commands.Cog):
                 await interaction.followup.send("❌ admin-ranks channel not found!", ephemeral=True)
                 return
 
-            # Get recent rank ticket messages
             ticket_messages = []
             async for message in admin_ranks_channel.history(limit=20):
                 if (message.author == interaction.client.user and 
@@ -793,7 +848,7 @@ class AdminCog(commands.Cog):
                 color=discord.Color.blue()
             )
 
-            for i, message in enumerate(ticket_messages[:10], 1):  # Show max 10 tickets
+            for i, message in enumerate(ticket_messages[:10], 1):
                 embed_data = message.embeds[0]
                 user_id = embed_data.footer.text.split(": ")[1]
                 user = interaction.guild.get_member(int(user_id))

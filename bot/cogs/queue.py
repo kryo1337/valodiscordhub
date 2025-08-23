@@ -157,7 +157,7 @@ class QueueCog(commands.Cog):
         if not guild:
             return
 
-        category = discord.utils.get(guild.categories, name="valohub")
+        category = discord.utils.get(guild.categories, name="Hub")
         if not category:
             return
 
@@ -222,10 +222,10 @@ class QueueCog(commands.Cog):
             await interaction.followup.send("❌ Count must be between 1 and 10", ephemeral=True)
             return
 
-        category = discord.utils.get(interaction.guild.categories, name="valohub")
+        category = discord.utils.get(interaction.guild.categories, name="Hub")
         if not category:
             await interaction.followup.send(
-                "❌ valohub category not found. Run /setup_queue first.", ephemeral=True
+                "❌ Hub category not found. Run /setup_queue first.", ephemeral=True
             )
             return
 
@@ -301,13 +301,13 @@ class QueueCog(commands.Cog):
     async def setup_queue(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        category = discord.utils.get(interaction.guild.categories, name="valohub")
+        category = discord.utils.get(interaction.guild.categories, name="Hub")
         if category:
             for channel in category.channels:
                 if channel.name.startswith("queue-"):
                     await channel.delete()
         else:
-            category = await interaction.guild.create_category("valohub")
+            category = await interaction.guild.create_category("Hub")
 
         rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
         for rank_group in rank_groups:
@@ -446,7 +446,7 @@ class QueueCog(commands.Cog):
 
     async def update_queue_message(self, guild: discord.Guild, rank_group: str, queue: Queue):
         try:
-            category = discord.utils.get(guild.categories, name="valohub")
+            category = discord.utils.get(guild.categories, name="Hub")
             if not category:
                 return
 

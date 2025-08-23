@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 import os
 from typing import Optional
 
-from utils.scraper import get_player_rank
 from utils.db import get_player, create_player, update_player_rank
 from utils.rate_limit import rate_limiter
 from utils.permissions import check_player_status
@@ -65,7 +64,7 @@ class RankModal(discord.ui.Modal, title="Enter your Riot ID"):
             riot_id = self.riot_id.value.strip()
             
             guild = interaction.guild
-            category = discord.utils.get(guild.categories, name="valohub")
+            category = discord.utils.get(guild.categories, name="Staff")
             if category:
                 admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks")
                 if admin_ranks_channel:
@@ -205,7 +204,7 @@ class RankSelectionModal(discord.ui.Modal, title="Select Rank"):
                     public_embed.add_field(name="Role Assigned", value=f"✅ {role_name}", inline=False)
                 public_embed.add_field(name="Assigned By", value=interaction.user.mention, inline=False)
 
-                category = interaction.guild and discord.utils.get(interaction.guild.categories, name="valohub")
+                category = interaction.guild and discord.utils.get(interaction.guild.categories, name="Staff")
                 admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks") if category else None
                 target_channel = admin_ranks_channel or (self.message.channel if hasattr(self, "message") else None)
                 if target_channel:
@@ -348,7 +347,7 @@ class RankSelectionView(discord.ui.View):
                     public_embed.add_field(name="Role Assigned", value=f"✅ {role_name}", inline=False)
                 public_embed.add_field(name="Assigned By", value=interaction.user.mention, inline=False)
 
-                category = interaction.guild and discord.utils.get(interaction.guild.categories, name="valohub")
+                category = interaction.guild and discord.utils.get(interaction.guild.categories, name="Staff")
                 admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks") if category else None
                 target_channel = admin_ranks_channel or (self.message.channel if hasattr(self, "message") else None)
                 if target_channel:
@@ -437,7 +436,7 @@ class RejectionModal(discord.ui.Modal, title="Reject Rank Request"):
                     color=discord.Color.red()
                 )
                 public_embed.add_field(name="Rejected By", value=interaction.user.mention, inline=False)
-                category = interaction.guild and discord.utils.get(interaction.guild.categories, name="valohub")
+                category = interaction.guild and discord.utils.get(interaction.guild.categories, name="Staff")
                 admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks") if category else None
                 target_channel = admin_ranks_channel or (self.message.channel if hasattr(self, "message") else None)
                 if target_channel:
@@ -477,9 +476,9 @@ class Rank(commands.Cog):
 
     async def create_rank_ticket(self, guild: discord.Guild, user: discord.Member, riot_id: str) -> Optional[discord.TextChannel]:
         try:
-            category = discord.utils.get(guild.categories, name="valohub")
+            category = discord.utils.get(guild.categories, name="Staff")
             if not category:
-                category = await guild.create_category("valohub")
+                category = await guild.create_category("Staff")
 
             channel = discord.utils.get(category.channels, name="admin-ranks")
             if not channel:
@@ -531,7 +530,7 @@ class Rank(commands.Cog):
         if not guild:
             return
 
-        category = discord.utils.get(guild.categories, name="valohub")
+        category = discord.utils.get(guild.categories, name="Hub")
         if not category:
             return
 
@@ -605,13 +604,13 @@ class Rank(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            category = discord.utils.get(interaction.guild.categories, name="valohub")
+            category = discord.utils.get(interaction.guild.categories, name="Hub")
             if category:
                 existing_channel = discord.utils.get(category.channels, name="rank")
                 if existing_channel:
                     await existing_channel.delete()
             else:
-                category = await interaction.guild.create_category("valohub")
+                category = await interaction.guild.create_category("Hub")
 
             overwrites = {
                 interaction.guild.default_role: discord.PermissionOverwrite(

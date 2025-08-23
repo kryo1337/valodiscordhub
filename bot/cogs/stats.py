@@ -22,7 +22,7 @@ class StatsCog(commands.Cog):
         if not guild:
             return
 
-        category = discord.utils.get(guild.categories, name="valohub")
+        category = discord.utils.get(guild.categories, name="Hub")
         if not category:
             return
 
@@ -57,13 +57,13 @@ class StatsCog(commands.Cog):
     async def setup_stats(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        category = discord.utils.get(interaction.guild.categories, name="valohub")
+        category = discord.utils.get(interaction.guild.categories, name="Hub")
         if category:
             existing_channel = discord.utils.get(category.channels, name="stats")
             if existing_channel:
                 await existing_channel.delete()
         else:
-            category = await interaction.guild.create_category("valohub")
+            category = await interaction.guild.create_category("Hub")
 
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(

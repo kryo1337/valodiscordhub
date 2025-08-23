@@ -18,4 +18,4 @@ metadata:
   namespace: valodiscordhub
 data:
   API_BASE_URL: "http://api-service:8000"
-  DISCORD_GUILD_ID: "1051909826407563264" 
+  DISCORD_GUILD_ID: "1407711525128507413" 

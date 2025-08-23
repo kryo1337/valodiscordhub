@@ -184,7 +184,7 @@ class LeaderboardCog(commands.Cog):
         if not guild:
             return
 
-        category = discord.utils.get(guild.categories, name="valohub")
+        category = discord.utils.get(guild.categories, name="Hub")
         if not category:
             return
 
@@ -229,13 +229,13 @@ class LeaderboardCog(commands.Cog):
     async def setup_leaderboard(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        category = discord.utils.get(interaction.guild.categories, name="valohub")
+        category = discord.utils.get(interaction.guild.categories, name="Hub")
         if category:
             for channel in category.channels:
                 if channel.name == "leaderboard":
                     await channel.delete()
         else:
-            category = await interaction.guild.create_category("valohub")
+            category = await interaction.guild.create_category("Hub")
 
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(

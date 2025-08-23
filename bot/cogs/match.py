@@ -860,9 +860,15 @@ class ScoreModal(discord.ui.Modal):
 
 async def create_match(guild: discord.Guild, rank_group: str, players: List[QueueEntry]):
     match_id = f"match_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    match_category = await guild.create_category(match_id)
+    
+    matches_parent_category = discord.utils.get(guild.categories, name="Matches")
+    if not matches_parent_category:
+        matches_parent_category = await guild.create_category("Matches")
+    
+    position = matches_parent_category.position + 1
+    match_category = await guild.create_category(match_id, position=position)
 
-    match_channel = await match_category.create_text_channel(name="Match")
+    match_channel = await match_category.create_text_channel(name="match")
 
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(connect=False),
