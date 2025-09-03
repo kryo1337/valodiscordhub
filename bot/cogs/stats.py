@@ -308,6 +308,7 @@ class HistoryLimitModal(discord.ui.Modal, title="Match History Limit"):
             embed.add_field(
                 name="Match Details",
                 value=(
+                    f"🗺️ Map: {match.selected_map or 'Unknown'}\n"
                     f"Score: {match.red_score}-{match.blue_score}\n"
                     f"Result: {user_result}\n"
                     f"Duration: {duration_str}\n"

@@ -133,6 +133,16 @@ async def update_match_defense(match_id: str, defense_start: str) -> Optional[Ma
     except Exception:
         return None
 
+async def update_match_maps(match_id: str, banned_maps: List[str], selected_map: str) -> Optional[Match]:
+    try:
+        data = await api_client.patch(f"/matches/{match_id}", {
+            "banned_maps": banned_maps,
+            "selected_map": selected_map
+        })
+        return Match(**data)
+    except Exception:
+        return None
+
 async def update_match_result(match_id: str, red_score: int, blue_score: int, result: str) -> Optional[Match]:
     try:
         update_data = {

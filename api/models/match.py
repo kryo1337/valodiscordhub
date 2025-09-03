@@ -12,6 +12,8 @@ class Match(BaseModel):
     lobby_master: str
     rank_group: Literal["iron-plat", "dia-asc", "imm-radiant"]
     defense_start: Optional[Literal["red", "blue"]] = None
+    banned_maps: List[str] = Field(default_factory=list)
+    selected_map: Optional[str] = None
     red_score: Optional[int] = None
     blue_score: Optional[int] = None
     result: Optional[Literal["red", "blue", "cancelled"]] = None

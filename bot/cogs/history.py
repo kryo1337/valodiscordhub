@@ -153,6 +153,7 @@ class HistoryCog(commands.Cog):
             embed.add_field(
                 name="Match Details",
                 value=(
+                    f"🗺️ Map: {match.selected_map or 'Unknown'}\n"
                     f"Score: {match.red_score}-{match.blue_score}\n"
                     f"Winner: {'🔴 Red Team' if match.result == 'red' else '🔵 Blue Team'}\n"
                     f"Duration: {duration_str}\n"
@@ -213,6 +214,7 @@ class HistoryCog(commands.Cog):
             embed.add_field(
                 name="Match Details",
                 value=(
+                    f"🗺️ Map: {match.selected_map or 'Unknown'}\n"
                     f"Score: {match.red_score}-{match.blue_score}\n"
                     f"Winner: {'🔴 Red Team' if match.result == 'red' else '🔵 Blue Team'}\n"
                     f"Duration: {duration_str}\n"
@@ -334,6 +336,7 @@ class HistoryCog(commands.Cog):
             embed.add_field(
                 name="Match Details",
                 value=(
+                    f"🗺️ Map: {match.selected_map or 'Unknown'}\n"
                     f"Score: {match.red_score}-{match.blue_score}\n"
                     f"Winner: {'🔴 Red Team' if match.result == 'red' else '🔵 Blue Team'}\n"
                     f"Duration: {duration_str}\n"

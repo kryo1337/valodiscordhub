@@ -5,7 +5,7 @@ from datetime import datetime
 import asyncio
 import random
 from models.queue import QueueEntry
-from utils.db import update_match_defense, get_match, update_match_teams, update_match_result
+from utils.db import update_match_defense, get_match, update_match_teams, update_match_result, update_match_maps
 from utils.db import create_match as create_match_db
 from utils.db import get_leaderboard_page, update_leaderboard, get_leaderboard, get_player
 from models.leaderboard import LeaderboardEntry
@@ -231,15 +231,177 @@ class TeamSelectionView(discord.ui.View):
             user_limit=5
         )
 
-        side_selector_id = self.captains[1 - self.last_picker]
-        side_view = SideSelectionView(self.match_id, self.red_team, self.blue_team, side_selector_id, red_vc, blue_vc)
+        map_ban_starter = 1 - self.last_picker
+        map_view = MapBanningView(self.match_id, self.red_team, self.blue_team, self.captains, map_ban_starter, red_vc, blue_vc)
 
         if self.selection_message:
-            await side_view.update_message(self.selection_message)
+            await map_view.update_message(self.selection_message)
         else:
             await channel.send("Error: Selection message not found. Proceeding with new message.")
-            new_message = await channel.send("Starting side selection...")
-            await side_view.update_message(new_message)
+            new_message = await channel.send("Starting map banning...")
+            await map_view.update_message(new_message)
+
+
+class MapBanningView(discord.ui.View):
+    def __init__(self, match_id: str, red_team: List[str], blue_team: List[str], captains: List[str], ban_starter: int, red_vc: discord.VoiceChannel, blue_vc: discord.VoiceChannel):
+        super().__init__(timeout=None)
+        self.match_id = match_id
+        self.red_team = red_team
+        self.blue_team = blue_team
+        self.captains = captains
+        self.red_vc = red_vc
+        self.blue_vc = blue_vc
+        
+        self.maps = ["Abyss", "Ascent", "Bind", "Corrode", "Haven", "Lotus", "Sunset"]
+        self.banned_maps = []
+        self.selected_map = None
+        
+        self.current_banner = ban_starter
+        self.bans_completed = 0
+        self.max_bans = 6
+        self.timeout_task = None
+        self.last_message = None
+
+    async def update_message(self, message: discord.Message):
+        self.last_message = message
+        
+        if self.bans_completed >= self.max_bans:
+            remaining_maps = [m for m in self.maps if m not in self.banned_maps]
+            if remaining_maps:
+                self.selected_map = remaining_maps[0]
+                await self.complete_map_selection()
+            return
+
+        current_captain = self.captains[self.current_banner]
+        current_team = "Red" if self.current_banner == 0 else "Blue"
+        
+        embed = discord.Embed(
+            title="Map Banning",
+            color=discord.Color.dark_theme()
+        )
+        
+        progress = "▰" * (self.bans_completed + 1) + "▱" * (self.max_bans - self.bans_completed - 1)
+        embed.add_field(
+            name="Progress",
+            value=f"`{progress}`\nBan {self.bans_completed + 1}/{self.max_bans}",
+            inline=False
+        )
+        
+        embed.add_field(
+            name=f"🔴 Red Team",
+            value=f"• Captain: <@{self.red_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.red_team[1:]]),
+            inline=True
+        )
+        embed.add_field(
+            name=f"🔵 Blue Team",
+            value=f"• Captain: <@{self.blue_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.blue_team[1:]]),
+            inline=True
+        )
+        
+        embed.add_field(
+            name="Current Turn",
+            value=f"{current_team} Team Captain (<@{current_captain}>)",
+            inline=False
+        )
+        
+        available_maps = [m for m in self.maps if m not in self.banned_maps]
+        if available_maps:
+            embed.add_field(
+                name="Available Maps",
+                value="\n".join([f"• {m}" for m in available_maps]),
+                inline=False
+            )
+        
+        if self.banned_maps:
+            embed.add_field(
+                name="Banned Maps",
+                value="\n".join([f"~~{m}~~" for m in self.banned_maps]),
+                inline=False
+            )
+        
+        embed.set_footer(text=f"⏱️ Time remaining: 15 seconds")
+
+        view = discord.ui.View()
+        if available_maps and self.bans_completed < self.max_bans:
+            for i, map_name in enumerate(available_maps):
+                if i >= 25:
+                    break
+                button = discord.ui.Button(
+                    label=f"Ban {map_name}",
+                    style=discord.ButtonStyle.danger,
+                    custom_id=f"ban_{map_name}"
+                )
+                
+                async def ban_callback(interaction: discord.Interaction, map_to_ban=map_name):
+                    if str(interaction.user.id) != current_captain:
+                        if str(interaction.user.id) in self.captains:
+                            await interaction.response.send_message("It's not your turn to ban!", ephemeral=True)
+                        else:
+                            await interaction.response.send_message("❌ You are not a captain! Only captains can ban maps.", ephemeral=True)
+                        return
+                    
+                    if self.timeout_task:
+                        self.timeout_task.cancel()
+                    
+                    await self.ban_map(interaction, map_to_ban)
+                
+                button.callback = ban_callback
+                view.add_item(button)
+
+        await message.edit(embed=embed, view=view)
+
+        if available_maps and self.bans_completed < self.max_bans:
+            await self.start_timeout()
+
+    async def ban_map(self, interaction: discord.Interaction, map_name: str):
+        self.banned_maps.append(map_name)
+        self.bans_completed += 1
+        
+        self.current_banner = 1 - self.current_banner
+        
+        await interaction.response.defer()
+        
+        if self.bans_completed >= self.max_bans:
+            await self.complete_map_selection()
+        else:
+            await self.update_message(self.last_message)
+
+    async def complete_map_selection(self):
+        remaining_maps = [m for m in self.maps if m not in self.banned_maps]
+        if remaining_maps:
+            self.selected_map = remaining_maps[0]
+        
+        await update_match_maps(self.match_id, self.banned_maps, self.selected_map)
+        
+        side_selector_id = self.captains[self.current_banner]
+        side_view = SideSelectionView(self.match_id, self.red_team, self.blue_team, side_selector_id, self.red_vc, self.blue_vc)
+        
+        await side_view.update_message(self.last_message)
+
+    async def start_timeout(self):
+        if self.timeout_task:
+            self.timeout_task.cancel()
+        self.timeout_task = asyncio.create_task(self._timeout_handler())
+
+    async def _timeout_handler(self):
+        try:
+            await asyncio.sleep(15)
+            await self.on_timeout()
+        except asyncio.CancelledError:
+            pass
+
+    async def on_timeout(self):
+        available_maps = [m for m in self.maps if m not in self.banned_maps]
+        if available_maps:
+            map_to_ban = random.choice(available_maps)
+            self.banned_maps.append(map_to_ban)
+            self.bans_completed += 1
+            self.current_banner = 1 - self.current_banner
+            
+            if self.bans_completed >= self.max_bans:
+                await self.complete_map_selection()
+            else:
+                await self.update_message(self.last_message)
 
 
 class SideSelectionView(discord.ui.View):
@@ -293,6 +455,7 @@ class SideSelectionView(discord.ui.View):
         
         embed = discord.Embed(
             title="Side Selection",
+            description=f"🗺️ **Map: {match.selected_map or 'Unknown'}**",
             color=discord.Color.dark_theme()
         )
 
@@ -329,7 +492,7 @@ class SideSelectionView(discord.ui.View):
                 value=f"{side_selector_team} Team Captain (<@{self.side_selector_id}>), please select your side:",
                 inline=False
             )
-            embed.set_footer(text="Time remaining: 30 seconds")
+            embed.set_footer(text="Time remaining: 15 seconds")
 
         view = discord.ui.View()
         
@@ -369,7 +532,7 @@ class SideSelectionView(discord.ui.View):
         self.timeout_task = asyncio.create_task(self._timeout_handler())
 
     async def _timeout_handler(self):
-        await asyncio.sleep(30)
+        await asyncio.sleep(15)
         await self.on_timeout()
 
     async def check_sides(self, interaction: Union[discord.Interaction, discord.Message]):
@@ -384,6 +547,7 @@ class SideSelectionView(discord.ui.View):
             score_view = ScoreSubmissionView(self.match_id, self.red_team, self.blue_team)
             embed = discord.Embed(
                 title="Score Submission",
+                description=f"🗺️ **Map: {match.selected_map or 'Unknown'}**",
                 color=discord.Color.dark_theme()
             )
 
