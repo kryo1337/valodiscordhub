@@ -12,6 +12,209 @@ from models.leaderboard import LeaderboardEntry
 from .leaderboard import LeaderboardCog
 import time
 
+CAPTAIN_VOTING_TIME = 30
+PLAYER_SELECTION_TIME = 15
+MAP_BAN_TIME = 15
+SIDE_SELECTION_TIME = 15
+
+
+class CaptainVotingView(discord.ui.View):
+    def __init__(self, match_id: str, players: List[QueueEntry], rank_group: str):
+        super().__init__(timeout=CAPTAIN_VOTING_TIME)
+        self.match_id = match_id
+        self.players = players
+        self.rank_group = rank_group
+        self.votes_highest = set()
+        self.votes_random = set()
+        self.required_votes = 6
+        self.total_players = len(players)
+        self.voting_complete = False
+        self.message = None
+        self.captains = None
+        self.voting_end_time = int(time.time()) + CAPTAIN_VOTING_TIME
+
+    @discord.ui.button(label="2 Highest Rated Players", style=discord.ButtonStyle.primary, emoji="⭐")
+    async def vote_highest(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        
+        if user_id not in [p.discord_id for p in self.players]:
+            await interaction.response.send_message("You are not part of this match!", ephemeral=True)
+            return
+        
+        self.votes_random.discard(user_id)
+        self.votes_highest.add(user_id)
+        
+        await interaction.response.defer()
+        await self.update_voting_message()
+        await self.check_vote_completion()
+
+    @discord.ui.button(label="Random Players", style=discord.ButtonStyle.secondary, emoji="🎲")
+    async def vote_random(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        
+        if user_id not in [p.discord_id for p in self.players]:
+            await interaction.response.send_message("You are not part of this match!", ephemeral=True)
+            return
+        
+        self.votes_highest.discard(user_id)
+        self.votes_random.add(user_id)
+        
+        await interaction.response.defer()
+        await self.update_voting_message()
+        await self.check_vote_completion()
+
+    async def update_voting_message(self):
+        if not self.message:
+            return
+
+        embed = discord.Embed(
+            title="Captain Selection Voting",
+            description=f"Vote for how captains should be selected!\n\n⏱️ **Voting ends <t:{self.voting_end_time}:R>**",
+            color=discord.Color.dark_theme()
+        )
+        
+        total_votes = len(self.votes_highest) + len(self.votes_random)
+        progress = int((total_votes / self.total_players) * 10)
+        progress_bar = "▰" * progress + "▱" * (10 - progress)
+        
+        embed.add_field(
+            name="Voting Progress",
+            value=f"`{progress_bar}` {total_votes}/{self.total_players} votes",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="⭐ 2 Highest Rated Players",
+            value=f"**{len(self.votes_highest)} votes** ({len(self.votes_highest)}/{self.required_votes} needed)\n" + 
+                  ("\n".join([f"• <@{uid}>" for uid in self.votes_highest]) if self.votes_highest else "No votes yet"),
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🎲 Random Players",
+            value=f"**{len(self.votes_random)} votes** ({len(self.votes_random)}/{self.required_votes} needed)\n" + 
+                  ("\n".join([f"• <@{uid}>" for uid in self.votes_random]) if self.votes_random else "No votes yet"),
+            inline=True
+        )
+        
+        voted_users = self.votes_highest | self.votes_random
+        non_voters = [p.discord_id for p in self.players if p.discord_id not in voted_users]
+        
+        if non_voters:
+            embed.add_field(
+                name="Haven't Voted Yet",
+                value="\n".join([f"• <@{uid}>" for uid in non_voters[:10]]),
+                inline=False
+            )
+        
+        embed.set_footer(text="6/10 votes needed")
+        
+        await self.message.edit(embed=embed, view=self)
+
+    async def check_vote_completion(self):
+        if self.voting_complete:
+            return
+            
+        if len(self.votes_highest) >= self.required_votes:
+            self.voting_complete = True
+            await self.complete_voting("highest")
+        elif len(self.votes_random) >= self.required_votes:
+            self.voting_complete = True
+            await self.complete_voting("random")
+
+    async def on_timeout(self):
+        if not self.voting_complete:
+            self.voting_complete = True
+            await self.complete_voting("highest")
+
+    async def complete_voting(self, result: str):
+        if result == "highest":
+            self.captains = await self.get_highest_rated_captains()
+            method = "⭐ **2 Highest Rated Players**"
+        else:
+            self.captains = await self.get_random_captains()
+            method = "🎲 **Random Players**"
+        
+        embed = discord.Embed(
+            title="Captain Selection Complete!",
+            description=f"Selection method: {method}",
+            color=discord.Color.dark_theme()
+        )
+        
+        embed.add_field(
+            name="Selected Captains",
+            value=f"🔴 Red Team Captain: <@{self.captains[0]}>\n🔵 Blue Team Captain: <@{self.captains[1]}>",
+            inline=False
+        )
+        
+        for item in self.children:
+            item.disabled = True
+        
+        await self.message.edit(embed=embed, view=self)
+        
+        lobby_master = random.choice(self.captains)
+        await self.update_match_captains(lobby_master)
+        
+        await asyncio.sleep(3)
+        await self.start_team_selection()
+
+    async def get_highest_rated_captains(self):
+        leaderboard = await get_leaderboard(self.rank_group)
+        player_ids = [p.discord_id for p in self.players]
+        
+        leaderboard_players = []
+        for player in leaderboard.players:
+            if player.discord_id in player_ids:
+                leaderboard_players.append(player)
+        
+        sorted_leaderboard_players = sorted(leaderboard_players, key=lambda x: x.points, reverse=True)
+        
+        if len(sorted_leaderboard_players) >= 2:
+            return [sorted_leaderboard_players[0].discord_id, sorted_leaderboard_players[1].discord_id]
+        else:
+            return await self.get_random_captains()
+
+    async def get_random_captains(self):
+        player_ids = [p.discord_id for p in self.players]
+        return random.sample(player_ids, 2)
+
+    async def update_match_captains(self, lobby_master: str):
+        from utils.api_client import api_client
+        
+        update_data = {
+            "captain_red": self.captains[0],
+            "captain_blue": self.captains[1],
+            "lobby_master": lobby_master
+        }
+        
+        try:
+            await api_client.patch(f"/matches/{self.match_id}", update_data)
+        except Exception as e:
+            print(f"Error updating match captains: {e}")
+
+    async def start_team_selection(self):
+        view = TeamSelectionView(self.match_id, self.players, self.captains)
+        
+        embed = discord.Embed(
+            title="Team Selection",
+            color=discord.Color.dark_theme()
+        )
+        
+        embed.add_field(
+            name="Captains",
+            value=f"🔴 Red Team Captain: <@{self.captains[0]}>\n🔵 Blue Team Captain: <@{self.captains[1]}>",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="Players",
+            value="\n".join([f"• <@{p.discord_id}>" for p in self.players]),
+            inline=False
+        )
+        
+        await self.message.edit(embed=embed, view=view)
+        await view.update_selection_message(self.message)
+
 
 class TeamSelectionView(discord.ui.View):
     def __init__(self, match_id: str, players: List[QueueEntry], captains: List[str]):
@@ -27,6 +230,7 @@ class TeamSelectionView(discord.ui.View):
         self.selection_message: discord.Message = None
         self.timeout_task: asyncio.Task = None
         self.last_picker: int = None
+        self.selection_end_time = None
 
     async def update_selection_message(self, message: discord.Message):
         self.selection_message = message
@@ -74,7 +278,14 @@ class TeamSelectionView(discord.ui.View):
                 inline=False
             )
         
-        embed.set_footer(text=f"⏱️ Time remaining: 15 seconds | Players remaining: {remaining_players}")
+        if self.selection_end_time:
+            embed.add_field(
+                name="⏱️ Time Remaining",
+                value=f"Selection ends <t:{self.selection_end_time}:R>",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Players remaining: {remaining_players}")
 
         view = discord.ui.View()
         if available_players and self.current_selection_index < len(self.selection_order) - 1:
@@ -110,7 +321,8 @@ class TeamSelectionView(discord.ui.View):
 
         await message.edit(embed=embed, view=view)
 
-        if available_players and self.current_selection_index < len(self.selection_order) - 1:
+        if available_players and self.current_selection_index < len(self.selection_order):
+            self.selection_end_time = int(time.time()) + PLAYER_SELECTION_TIME
             await self.start_timeout()
 
     async def select_callback(self, interaction: discord.Interaction, selected_id: str):
@@ -129,6 +341,7 @@ class TeamSelectionView(discord.ui.View):
             await self.end_selection(interaction.channel)
         else:
             self.current_captain_index = 1 - self.current_captain_index
+            self.selection_end_time = int(time.time()) + PLAYER_SELECTION_TIME
             await self.update_selection_message(self.selection_message)
 
     async def assign_last_player(self, last_player_id: str):
@@ -147,7 +360,7 @@ class TeamSelectionView(discord.ui.View):
 
     async def _timeout_handler(self):
         try:
-            await asyncio.sleep(15)
+            await asyncio.sleep(PLAYER_SELECTION_TIME)
             await self.on_timeout()
         except asyncio.CancelledError:
             pass
@@ -177,6 +390,7 @@ class TeamSelectionView(discord.ui.View):
             await self.end_selection(self.selection_message.channel)
         else:
             self.current_captain_index = 1 - self.current_captain_index
+            self.selection_end_time = int(time.time()) + PLAYER_SELECTION_TIME
             await self.update_selection_message(self.selection_message)
 
     async def end_selection(self, channel: discord.abc.Messageable):
@@ -261,9 +475,14 @@ class MapBanningView(discord.ui.View):
         self.max_bans = 6
         self.timeout_task = None
         self.last_message = None
+        self.ban_end_time = None
 
     async def update_message(self, message: discord.Message):
         self.last_message = message
+        
+        available_maps = [m for m in self.maps if m not in self.banned_maps]
+        if available_maps and self.bans_completed < self.max_bans:
+            self.ban_end_time = int(time.time()) + MAP_BAN_TIME
         
         if self.bans_completed >= self.max_bans:
             remaining_maps = [m for m in self.maps if m not in self.banned_maps]
@@ -319,7 +538,12 @@ class MapBanningView(discord.ui.View):
                 inline=False
             )
         
-        embed.set_footer(text=f"⏱️ Time remaining: 15 seconds")
+        if self.ban_end_time:
+            embed.add_field(
+                name="⏱️ Time Remaining",
+                value=f"Ban phase ends <t:{self.ban_end_time}:R>",
+                inline=False
+            )
 
         view = discord.ui.View()
         if available_maps and self.bans_completed < self.max_bans:
@@ -364,6 +588,7 @@ class MapBanningView(discord.ui.View):
         if self.bans_completed >= self.max_bans:
             await self.complete_map_selection()
         else:
+            self.ban_end_time = int(time.time()) + MAP_BAN_TIME
             await self.update_message(self.last_message)
 
     async def complete_map_selection(self):
@@ -385,7 +610,7 @@ class MapBanningView(discord.ui.View):
 
     async def _timeout_handler(self):
         try:
-            await asyncio.sleep(15)
+            await asyncio.sleep(MAP_BAN_TIME)
             await self.on_timeout()
         except asyncio.CancelledError:
             pass
@@ -401,6 +626,7 @@ class MapBanningView(discord.ui.View):
             if self.bans_completed >= self.max_bans:
                 await self.complete_map_selection()
             else:
+                self.ban_end_time = int(time.time()) + MAP_BAN_TIME
                 await self.update_message(self.last_message)
 
 
@@ -417,6 +643,7 @@ class SideSelectionView(discord.ui.View):
         self.blue_side = None
         self.timeout_task = None
         self.last_message = None
+        self.side_end_time = None
 
     async def attack_callback(self, interaction: discord.Interaction):
         if str(interaction.user.id) != self.side_selector_id:
@@ -459,8 +686,8 @@ class SideSelectionView(discord.ui.View):
             color=discord.Color.dark_theme()
         )
 
-        red_status = f"⚔️ Attack" if self.red_side == "attack" else f"🛡️ Defense"
-        blue_status = f"⚔️ Attack" if self.blue_side == "attack" else f"🛡️ Defense"
+        red_status = f"⚔️ Attack" if self.red_side == "attack" else f"🛡️ Defense" if self.red_side == "defense" else ""
+        blue_status = f"⚔️ Attack" if self.blue_side == "attack" else f"🛡️ Defense" if self.blue_side == "defense" else ""
         
         embed.add_field(
             name=f"🔴 Red Team {red_status}",
@@ -492,7 +719,12 @@ class SideSelectionView(discord.ui.View):
                 value=f"{side_selector_team} Team Captain (<@{self.side_selector_id}>), please select your side:",
                 inline=False
             )
-            embed.set_footer(text="Time remaining: 15 seconds")
+            if self.side_end_time:
+                embed.add_field(
+                    name="⏱️ Time Remaining",
+                    value=f"Side selection ends <t:{self.side_end_time}:R>",
+                    inline=False
+                )
 
         view = discord.ui.View()
         
@@ -516,6 +748,8 @@ class SideSelectionView(discord.ui.View):
 
         await message.edit(embed=embed, view=view)
 
+        if not self.red_side and not self.blue_side:
+            self.side_end_time = int(time.time()) + SIDE_SELECTION_TIME
         await self.start_timeout()
 
     async def on_timeout(self):
@@ -532,7 +766,7 @@ class SideSelectionView(discord.ui.View):
         self.timeout_task = asyncio.create_task(self._timeout_handler())
 
     async def _timeout_handler(self):
-        await asyncio.sleep(15)
+        await asyncio.sleep(SIDE_SELECTION_TIME)
         await self.on_timeout()
 
     async def check_sides(self, interaction: Union[discord.Interaction, discord.Message]):
@@ -1052,52 +1286,24 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
         overwrites=overwrites
     )
     
-    leaderboard = await get_leaderboard(rank_group)
-    
-    player_ids = [p.discord_id for p in players]
-    
-    leaderboard_players = []
-    for player in leaderboard.players:
-        if player.discord_id in player_ids:
-            leaderboard_players.append(player)
-    
-    sorted_leaderboard_players = sorted(leaderboard_players, key=lambda x: x.points, reverse=True)
-    
-    if len(sorted_leaderboard_players) >= 2:
-        captains = [sorted_leaderboard_players[0].discord_id, sorted_leaderboard_players[1].discord_id]
-    else:
-        leaderboard_ids = [p.discord_id for p in sorted_leaderboard_players]
-        remaining_players = [pid for pid in player_ids if pid not in leaderboard_ids]
-        
-        if sorted_leaderboard_players and remaining_players:
-            captains = [sorted_leaderboard_players[0].discord_id]
-            captains.append(random.choice(remaining_players))
-        else:
-            captains = random.sample(player_ids, 2)
-   
-    lobby_master = random.choice(captains)
+    temp_captains = [players[0].discord_id, players[1].discord_id]
+    lobby_master = temp_captains[0]
     
     await create_match_db(
         match_id=match_id,
         players_red=[],
         players_blue=[],
-        captain_red=captains[0],
-        captain_blue=captains[1],
+        captain_red=temp_captains[0],
+        captain_blue=temp_captains[1],
         lobby_master=lobby_master,
         rank_group=rank_group
     )
     
-    view = TeamSelectionView(match_id, players, captains)
+    voting_view = CaptainVotingView(match_id, players, rank_group)
     
     embed = discord.Embed(
-        title="Match Setup Complete!",
-        color=discord.Color.dark_theme()
-    )
-
-    embed.add_field(
-        name="Captains",
-        value=f"🔴 Red Team Captain: <@{captains[0]}>\n🔵 Blue Team Captain: <@{captains[1]}>",
-        inline=False
+        title="Match Created!",
+        color=discord.Color.blue()
     )
 
     embed.add_field(
@@ -1111,11 +1317,18 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
         value=f"🎤 {match_vc.mention}",
         inline=False
     )
+    
+    embed.add_field(
+        name="Captain Selection",
+        value="Players are now voting for captain selection method!",
+        inline=False
+    )
 
-    initial_message = await match_channel.send(embed=embed, view=view)
-
-    await asyncio.sleep(10)
-    await view.update_selection_message(initial_message)
+    initial_message = await match_channel.send(embed=embed, view=voting_view)
+    voting_view.message = initial_message
+    
+    await asyncio.sleep(1)
+    await voting_view.update_voting_message()
 
 class MatchCog(commands.Cog):
     def __init__(self, bot):
