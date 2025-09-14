@@ -127,7 +127,7 @@ class QueueView(discord.ui.View):
                 await queue_cog.update_queue_message(interaction.guild, self.rank_group, queue)
 
             if matched_players:
-                await create_match(interaction.guild, self.rank_group, matched_players)
+                await create_match(interaction.guild, self.rank_group, matched_players, interaction.client)
 
         except Exception as e:
             try:

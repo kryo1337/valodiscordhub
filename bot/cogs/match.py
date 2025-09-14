@@ -6,8 +6,9 @@ import asyncio
 import random
 from models.queue import QueueEntry
 from utils.db import update_match_defense, get_match, update_match_teams, update_match_result, update_match_maps
-from utils.db import create_match as create_match_db
+from utils.db import create_match as create_match_db, get_next_match_id, calculate_mmr_points
 from utils.db import get_leaderboard_page, update_leaderboard, get_leaderboard, get_player
+from utils.db import update_match_result, add_admin_log
 from models.leaderboard import LeaderboardEntry
 from .leaderboard import LeaderboardCog
 import time
@@ -16,6 +17,177 @@ CAPTAIN_VOTING_TIME = 30
 PLAYER_SELECTION_TIME = 15
 MAP_BAN_TIME = 15
 SIDE_SELECTION_TIME = 15
+AFK_CHECK_TIME = 300
+
+
+class AFKCheckView(discord.ui.View):
+    def __init__(self, match_id: str, players: List[QueueEntry], rank_group: str, lobby_vc: discord.VoiceChannel, match_cog=None):
+        super().__init__(timeout=AFK_CHECK_TIME)
+        self.match_id = match_id
+        self.players = players
+        self.rank_group = rank_group
+        self.lobby_vc = lobby_vc
+        self.message = None
+        self.afk_check_end_time = int(time.time()) + AFK_CHECK_TIME
+        self.check_complete = False
+        self.match_cog = match_cog
+        
+        if self.match_cog:
+            self.match_cog.afk_checks[match_id] = self
+
+    async def update_afk_message(self):
+        if not self.message:
+            return
+
+        voice_members = {str(member.id) for member in self.lobby_vc.members}
+        player_ids = {p.discord_id for p in self.players}
+        
+        joined_players = [p for p in self.players if p.discord_id in voice_members]
+        missing_players = [p for p in self.players if p.discord_id not in voice_members]
+
+        embed = discord.Embed(
+            title="🎤 AFK Check - Join Voice Channel",
+            description=f"**All players must join {self.lobby_vc.mention} to continue!**\n\n⏱️ **Time remaining: <t:{self.afk_check_end_time}:R>**",
+            color=discord.Color.dark_theme()
+        )
+
+        if missing_players:
+            embed.add_field(
+                name="❌ Missing Players",
+                value="\n".join([f"• <@{p.discord_id}>" for p in missing_players]),
+                inline=False
+            )
+
+        embed.add_field(
+            name="Status",
+            value=f"**{len(joined_players)}/{len(self.players)}** players joined",
+            inline=False
+        )
+
+        embed.set_footer(text="Players who don't join will be replaced or timed out!")
+
+        await self.message.edit(embed=embed, view=self)
+
+        if len(missing_players) == 0:
+            await self.complete_afk_check()
+
+    @discord.ui.button(label="🚀 Force Start Voting (Testing)", style=discord.ButtonStyle.success)
+    async def force_start_voting(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        
+        self.check_complete = True
+        
+        if self.match_cog and self.match_id in self.match_cog.afk_checks:
+            del self.match_cog.afk_checks[self.match_id]
+        
+        await asyncio.sleep(1)
+        await self.start_captain_voting(self.players)
+
+    async def on_timeout(self):
+        if not self.check_complete:
+            await self.handle_afk_timeout()
+
+    async def handle_afk_timeout(self):
+        voice_members = {str(member.id) for member in self.lobby_vc.members}
+        missing_players = [p for p in self.players if p.discord_id not in voice_members]
+        
+        if missing_players:
+            embed = discord.Embed(
+                title="⚠️ AFK Check Failed",
+                description="Some players failed to join the voice channel.",
+                color=discord.Color.red()
+            )
+            
+            embed.add_field(
+                name="Missing Players",
+                value="\n".join([f"• <@{p.discord_id}>" for p in missing_players]),
+                inline=False
+            )
+
+            # TODO: Replace missing players with queue players
+            # TODO: Timeout missing players for 3 hours
+            # # Timeout missing players
+            # for player in missing_players:
+            #     await timeout_player(player.discord_id, duration_minutes=180, reason="AFK during match setup")
+
+            embed.add_field(
+                name="Action Required",
+                value="❌ **Match cancelled** - Not enough active players.\n*(Replacement system not implemented yet)*",
+                inline=False
+            )
+
+            await self.message.edit(embed=embed, view=None)
+            
+            if self.match_cog and self.match_cog.bot:
+                admin_cog = self.match_cog.bot.get_cog("AdminCog")
+                if admin_cog:
+                    try:
+                        await update_match_result(
+                            match_id=self.match_id,
+                            red_score=None,
+                            blue_score=None,
+                            result="cancelled"
+                        )
+                        
+                        await add_admin_log(
+                            action="cancel_match",
+                            admin_discord_id="system",
+                            match_id=self.match_id,
+                            reason="Match cancelled due to AFK players"
+                        )
+                        
+                        await admin_cog.cleanup_match_channels(self.message.guild, self.match_id)
+                    except Exception as e:
+                        print(f"Error cancelling match: {e}")
+        else:
+            await self.complete_afk_check()
+
+    async def complete_afk_check(self):
+        self.check_complete = True
+        
+        if self.match_cog and self.match_id in self.match_cog.afk_checks:
+            del self.match_cog.afk_checks[self.match_id]
+        
+        voice_members = {str(member.id) for member in self.lobby_vc.members}
+        missing_players = [p for p in self.players if p.discord_id not in voice_members]
+        
+        if len(missing_players) == 0:
+            await asyncio.sleep(1)
+            await self.start_captain_voting(self.players)
+        else:
+            embed = discord.Embed(
+                title="❌ Match Cancelled",
+                description="Not enough active players to continue.",
+                color=discord.Color.red()
+            )
+            await self.message.edit(embed=embed, view=None)
+            
+            if self.match_cog and self.match_cog.bot:
+                admin_cog = self.match_cog.bot.get_cog("AdminCog")
+                if admin_cog:
+                    try:
+                        await update_match_result(
+                            match_id=self.match_id,
+                            red_score=None,
+                            blue_score=None,
+                            result="cancelled"
+                        )
+                        
+                        await add_admin_log(
+                            action="cancel_match",
+                            admin_discord_id="system",
+                            match_id=self.match_id,
+                            reason="Match cancelled due to insufficient players"
+                        )
+                        
+                        await admin_cog.cleanup_match_channels(self.message.guild, self.match_id)
+                    except Exception as e:
+                        print(f"Error cancelling match: {e}")
+
+    async def start_captain_voting(self, active_players: List[QueueEntry]):
+        voting_view = CaptainVotingView(self.match_id, active_players, self.rank_group)
+        voting_view.message = self.message
+        await voting_view.update_voting_message()
 
 
 class CaptainVotingView(discord.ui.View):
@@ -69,7 +241,7 @@ class CaptainVotingView(discord.ui.View):
 
         embed = discord.Embed(
             title="Captain Selection Voting",
-            description=f"Vote for how captains should be selected!\n\n⏱️ **Voting ends <t:{self.voting_end_time}:R>**",
+            description="Vote for how captains should be selected!",
             color=discord.Color.dark_theme()
         )
         
@@ -106,6 +278,12 @@ class CaptainVotingView(discord.ui.View):
                 value="\n".join([f"• <@{uid}>" for uid in non_voters[:10]]),
                 inline=False
             )
+        
+        embed.add_field(
+            name="⏱️ Time Remaining",
+            value=f"Voting ends <t:{self.voting_end_time}:R>",
+            inline=False
+        )
         
         embed.set_footer(text="6/10 votes needed")
         
@@ -240,6 +418,9 @@ class TeamSelectionView(discord.ui.View):
         if self.current_selection_index >= len(self.selection_order):
             return
 
+        if available_players and self.current_selection_index < len(self.selection_order):
+            self.selection_end_time = int(time.time()) + PLAYER_SELECTION_TIME
+
         current_captain = self.captains[self.current_captain_index]
         
         embed = discord.Embed(
@@ -322,7 +503,6 @@ class TeamSelectionView(discord.ui.View):
         await message.edit(embed=embed, view=view)
 
         if available_players and self.current_selection_index < len(self.selection_order):
-            self.selection_end_time = int(time.time()) + PLAYER_SELECTION_TIME
             await self.start_timeout()
 
     async def select_callback(self, interaction: discord.Interaction, selected_id: str):
@@ -519,7 +699,7 @@ class MapBanningView(discord.ui.View):
         
         embed.add_field(
             name="Current Turn",
-            value=f"{current_team} Team Captain (<@{current_captain}>)",
+            value=f"<@{current_captain}>",
             inline=False
         )
         
@@ -700,6 +880,16 @@ class SideSelectionView(discord.ui.View):
             inline=True
         )
         
+        if not self.red_side and not self.blue_side:
+            if not self.side_end_time:
+                self.side_end_time = int(time.time()) + SIDE_SELECTION_TIME
+                
+            embed.add_field(
+                name="Side Selection",
+                value=f"{side_selector_team} Team Captain (<@{self.side_selector_id}>), please select your side:",
+                inline=False
+            )
+        
         embed.add_field(
             name="Voice Channels",
             value=f"🔴 {self.red_vc.mention}\n🔵 {self.blue_vc.mention}",
@@ -712,19 +902,12 @@ class SideSelectionView(discord.ui.View):
             inline=False
         )
         
-        
-        if not self.red_side and not self.blue_side:
+        if not self.red_side and not self.blue_side and self.side_end_time:
             embed.add_field(
-                name="Side Selection",
-                value=f"{side_selector_team} Team Captain (<@{self.side_selector_id}>), please select your side:",
+                name="⏱️ Time Remaining",
+                value=f"Side selection ends <t:{self.side_end_time}:R>",
                 inline=False
             )
-            if self.side_end_time:
-                embed.add_field(
-                    name="⏱️ Time Remaining",
-                    value=f"Side selection ends <t:{self.side_end_time}:R>",
-                    inline=False
-                )
 
         view = discord.ui.View()
         
@@ -749,8 +932,7 @@ class SideSelectionView(discord.ui.View):
         await message.edit(embed=embed, view=view)
 
         if not self.red_side and not self.blue_side:
-            self.side_end_time = int(time.time()) + SIDE_SELECTION_TIME
-        await self.start_timeout()
+            await self.start_timeout()
 
     async def on_timeout(self):
         if not self.red_side or not self.blue_side:
@@ -779,48 +961,11 @@ class SideSelectionView(discord.ui.View):
             match = await get_match(self.match_id)
 
             score_view = ScoreSubmissionView(self.match_id, self.red_team, self.blue_team)
-            embed = discord.Embed(
-                title="Score Submission",
-                description=f"🗺️ **Map: {match.selected_map or 'Unknown'}**",
-                color=discord.Color.dark_theme()
-            )
-
-            red_status = f"⚔️ Attack" if self.red_side == "attack" else f"🛡️ Defense"
-            blue_status = f"⚔️ Attack" if self.blue_side == "attack" else f"🛡️ Defense"
-
-            embed.add_field(
-                name=f"🔴 Red Team {red_status}",
-                value=f"• Captain: <@{self.red_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.red_team[1:]]),
-                inline=True
-            )
-            embed.add_field(
-                name=f"🔵 Blue Team {blue_status}",
-                value=f"• Captain: <@{self.blue_team[0]}>\n" + "\n".join([f"• <@{id}>" for id in self.blue_team[1:]]),
-                inline=True
-            )
-
-            embed.add_field(
-                name="Voice Channels",
-                value=f"🔴 {self.red_vc.mention}\n🔵 {self.blue_vc.mention}",
-                inline=False
-            )
-
-            embed.add_field(
-                name="🎮 Lobby Master",
-                value=f"<@{match.lobby_master}>",
-                inline=False
-            )
-
-            embed.add_field(
-                name="Score Submission",
-                value="Captains, please submit the match score:",
-                inline=False
-            )
-
+            
             if isinstance(interaction, discord.Message):
-                await interaction.edit(embed=embed, view=score_view)
+                await score_view.update_message(interaction)
             else:
-                await interaction.message.edit(embed=embed, view=score_view)
+                await score_view.update_message(interaction.message)
 
 class ScoreSubmissionView(discord.ui.View):
     def __init__(self, match_id: str, red_team: List[str], blue_team: List[str]):
@@ -966,33 +1111,35 @@ class ScoreSubmissionView(discord.ui.View):
             color=discord.Color.dark_theme()
         )
         
-        red_score_text = f"{self.red_score[0]}-{self.red_score[1]}" if self.red_score else "Not submitted"
-        blue_score_text = f"{self.blue_score[0]}-{self.blue_score[1]}" if self.blue_score else "Not submitted"
+        red_points_win, blue_points_win, red_points_lose, blue_points_lose, red_avg, blue_avg = await self.get_mmr_points_with_averages()
+        
+        red_team_value = f"• Captain: <@{self.red_team[0]}>\n"
+        red_team_value += "\n".join([f"• <@{id}>" for id in self.red_team[1:]])
+        red_team_value += f"\n• Average MMR: **{red_avg:.0f}**"
+        red_team_value += f"\n• Points: **+{red_points_win}** (win) / **{red_points_lose}** (lose)"
+        
+        blue_team_value = f"• Captain: <@{self.blue_team[0]}>\n"
+        blue_team_value += "\n".join([f"• <@{id}>" for id in self.blue_team[1:]])
+        blue_team_value += f"\n• Average MMR: **{blue_avg:.0f}**"
+        blue_team_value += f"\n• Points: **+{blue_points_win}** (win) / **{blue_points_lose}** (lose)"
         
         embed.add_field(
             name="🔴 Red Team",
-            value=f"• <@{self.red_captain}>\n• Score: {red_score_text}",
+            value=red_team_value,
             inline=True
         )
         embed.add_field(
             name="🔵 Blue Team",
-            value=f"• <@{self.blue_captain}>\n• Score: {blue_score_text}",
+            value=blue_team_value,
             inline=True
         )
         
         if not self.score_submission_enabled:
-            elapsed_time = time.time() - self.start_time
-            remaining_time = 300 - elapsed_time
-            minutes = int(remaining_time // 60)
-            seconds = int(remaining_time % 60)
-            
-
-            progress = int((remaining_time / 300) * 10)
-            progress_bar = "▰" * progress + "▱" * (10 - progress)
+            cooldown_end_time = int(self.start_time + 300)
             
             embed.add_field(
-                name="Score Submission Cooldown",
-                value=f"`{progress_bar}` {minutes}:{seconds:02d}",
+                name="⏱️ Score Submission Cooldown",
+                value=f"Score submission enabled <t:{cooldown_end_time}:R>",
                 inline=False
             )
         else:
@@ -1042,6 +1189,37 @@ class ScoreSubmissionView(discord.ui.View):
         view.add_item(admin_button)
         
         await message.edit(embed=embed, view=view)
+    
+    async def get_mmr_points_with_averages(self):
+        try:
+            match = await get_match(self.match_id)
+            leaderboard = await get_leaderboard(match.rank_group)
+            current_entries = {str(p.discord_id): p for p in leaderboard.players}
+            
+            red_team_points = []
+            blue_team_points = []
+            
+            for player_id in self.red_team:
+                if player_id in current_entries:
+                    red_team_points.append(current_entries[player_id].points)
+                else:
+                    red_team_points.append(1000)
+                    
+            for player_id in self.blue_team:
+                if player_id in current_entries:
+                    blue_team_points.append(current_entries[player_id].points)
+                else:
+                    blue_team_points.append(1000)
+            
+            red_avg = sum(red_team_points) / len(red_team_points)
+            blue_avg = sum(blue_team_points) / len(blue_team_points)
+            
+            red_wins_points = calculate_mmr_points(red_avg, blue_avg, True)
+            blue_wins_points = calculate_mmr_points(red_avg, blue_avg, False)
+            
+            return red_wins_points[0], blue_wins_points[1], red_wins_points[1], blue_wins_points[0], red_avg, blue_avg
+        except Exception:
+            return 25, 25, -25, -25, 1000, 1000
 
     def validate_score(self, score: int) -> bool:
         return 0 <= score <= 13
@@ -1061,41 +1239,70 @@ class ScoreSubmissionView(discord.ui.View):
             if player and player.rank:
                 player_ranks[player_id] = player.rank
 
-        winning_team = self.red_team if winner == "red" else self.blue_team
-        for player_id in winning_team:
+        red_team_points = []
+        blue_team_points = []
+        
+        for player_id in self.red_team:
+            if player_id in current_entries:
+                red_team_points.append(current_entries[player_id].points)
+            else:
+                red_team_points.append(1000) 
+                
+        for player_id in self.blue_team:
+            if player_id in current_entries:
+                blue_team_points.append(current_entries[player_id].points)
+            else:
+                blue_team_points.append(1000) 
+        
+        red_avg = sum(red_team_points) / len(red_team_points)
+        blue_avg = sum(blue_team_points) / len(blue_team_points)
+        
+        red_won = winner == "red"
+        red_points_change, blue_points_change = calculate_mmr_points(red_avg, blue_avg, red_won)
+
+        for player_id in self.red_team:
             if player_id in current_entries:
                 entry = current_entries[player_id]
-                entry.points += 10
+                entry.points = max(0, entry.points + red_points_change)
                 entry.matches_played += 1
-                entry.winrate = (entry.winrate * (entry.matches_played - 1) + 100) / entry.matches_played
-                entry.streak = max(0, entry.streak) + 1
+                if red_won:
+                    entry.winrate = (entry.winrate * (entry.matches_played - 1) + 100) / entry.matches_played
+                    entry.streak = max(0, entry.streak) + 1
+                else:
+                    entry.winrate = (entry.winrate * (entry.matches_played - 1)) / entry.matches_played
+                    entry.streak = min(0, entry.streak) - 1
             else:
+                new_points = 1000 + red_points_change
                 entry = LeaderboardEntry(
                     discord_id=player_id,
                     rank=player_ranks.get(player_id, "Unranked"),
-                    points=1010,
+                    points=max(0, new_points),
                     matches_played=1,
-                    winrate=100.0,
-                    streak=1
+                    winrate=100.0 if red_won else 0.0,
+                    streak=1 if red_won else -1
                 )
             updated_entries.append(entry)
 
-        losing_team = self.blue_team if winner == "red" else self.red_team
-        for player_id in losing_team:
+        for player_id in self.blue_team:
             if player_id in current_entries:
                 entry = current_entries[player_id]
-                entry.points = max(0, entry.points - 10) 
+                entry.points = max(0, entry.points + blue_points_change)
                 entry.matches_played += 1
-                entry.winrate = (entry.winrate * (entry.matches_played - 1)) / entry.matches_played
-                entry.streak = min(0, entry.streak) - 1
+                if not red_won: 
+                    entry.winrate = (entry.winrate * (entry.matches_played - 1) + 100) / entry.matches_played
+                    entry.streak = max(0, entry.streak) + 1
+                else:
+                    entry.winrate = (entry.winrate * (entry.matches_played - 1)) / entry.matches_played
+                    entry.streak = min(0, entry.streak) - 1
             else:
+                new_points = 1000 + blue_points_change
                 entry = LeaderboardEntry(
                     discord_id=player_id,
                     rank=player_ranks.get(player_id, "Unranked"),
-                    points=990,
+                    points=max(0, new_points),
                     matches_played=1,
-                    winrate=0.0,
-                    streak=-1
+                    winrate=100.0 if not red_won else 0.0,
+                    streak=1 if not red_won else -1
                 )
             updated_entries.append(entry)
 
@@ -1256,8 +1463,8 @@ class ScoreModal(discord.ui.Modal):
             )
             await interaction.response.send_message(embed=embed)
 
-async def create_match(guild: discord.Guild, rank_group: str, players: List[QueueEntry]):
-    match_id = f"match_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+async def create_match(guild: discord.Guild, rank_group: str, players: List[QueueEntry], bot=None):
+    match_id = await get_next_match_id()
     
     matches_parent_category = discord.utils.get(guild.categories, name="Matches")
     if not matches_parent_category:
@@ -1299,41 +1506,48 @@ async def create_match(guild: discord.Guild, rank_group: str, players: List[Queu
         rank_group=rank_group
     )
     
-    voting_view = CaptainVotingView(match_id, players, rank_group)
+    match_cog = bot.get_cog("MatchCog") if bot else None
+    afk_view = AFKCheckView(match_id, players, rank_group, match_vc, match_cog)
+    
+    player_pings = " ".join([f"<@{p.discord_id}>" for p in players])
     
     embed = discord.Embed(
-        title="Match Created!",
-        color=discord.Color.blue()
+        title="🎤 Match Found",
+        description=f"{player_pings}\n\n",
+        color=discord.Color.dark_theme()
     )
 
-    embed.add_field(
-        name="Players",
-        value="\n".join([f"• <@{p.discord_id}>" for p in players]),
-        inline=False
-    )
-
-    embed.add_field(
-        name="Voice Channel",
-        value=f"🎤 {match_vc.mention}",
-        inline=False
-    )
+    initial_message = await match_channel.send(embed=embed, view=afk_view)
+    afk_view.message = initial_message
     
-    embed.add_field(
-        name="Captain Selection",
-        value="Players are now voting for captain selection method!",
-        inline=False
-    )
-
-    initial_message = await match_channel.send(embed=embed, view=voting_view)
-    voting_view.message = initial_message
-    
-    await asyncio.sleep(1)
-    await voting_view.update_voting_message()
+    await asyncio.sleep(3)
+    await afk_view.update_afk_message()
 
 class MatchCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_matches = {}
+        self.afk_checks = {}
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        if not self.afk_checks:
+            return
+            
+        for match_id, afk_view in list(self.afk_checks.items()):
+            if afk_view.check_complete:
+                continue
+                
+            player_ids = {p.discord_id for p in afk_view.players}
+            if str(member.id) in player_ids:
+                joined_lobby = after.channel == afk_view.lobby_vc
+                left_lobby = before.channel == afk_view.lobby_vc and after.channel != afk_view.lobby_vc
+                
+                if joined_lobby or left_lobby:
+                    try:
+                        await afk_view.update_afk_message()
+                    except Exception as e:
+                        print(f"Error updating AFK message: {e}")
 
 async def setup(bot):
     await bot.add_cog(MatchCog(bot))

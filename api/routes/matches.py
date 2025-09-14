@@ -7,6 +7,22 @@ from typing import List
 
 router = APIRouter(prefix="/matches", tags=["matches"])
 
+@router.get("/next-id", dependencies=[Depends(require_bot_token)])
+async def get_next_match_id(db: AsyncIOMotorDatabase = Depends(get_db)):
+    cursor = db.matches.find({}, {"match_id": 1}).sort("_id", -1)
+    highest_num = 0
+    async for doc in cursor:
+        match_id = doc.get("match_id", "")
+        if match_id.startswith("match_"):
+            try:
+                num = int(match_id.split("_")[1])
+                highest_num = max(highest_num, num)
+            except (IndexError, ValueError):
+                continue
+    
+    next_num = highest_num + 1
+    return {"match_id": f"match_{next_num}"}
+
 @router.get("/active", response_model=List[Match])
 async def get_active_matches(db: AsyncIOMotorDatabase = Depends(get_db)):
     cursor = db.matches.find({"result": None})

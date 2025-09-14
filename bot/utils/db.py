@@ -100,6 +100,41 @@ async def remove_player_from_queue(rank_group: str, discord_id: str) -> Queue:
     data = await api_client.post(f"/queue/{rank_group}/leave", entry_data)
     return Queue(**data)
 
+def calculate_mmr_points(team1_avg: float, team2_avg: float, team1_won: bool, base_points: int = 25) -> Tuple[int, int]:
+    mmr_diff = team1_avg - team2_avg
+    
+    adjustment = int(mmr_diff / 25)
+    
+    if team1_won:
+        team1_points = base_points - adjustment
+        team2_points = -(base_points + adjustment)
+    else:
+        team1_points = -(base_points + adjustment)
+        team2_points = base_points - adjustment
+    
+    return team1_points, team2_points
+
+async def get_next_match_id() -> str:
+    try:
+        data = await api_client.get("/matches/next-id")
+        return data["match_id"]
+    except Exception:
+        try:
+            matches = await api_client.get("/matches/active")
+            match_numbers = []
+            for match in matches:
+                match_id = match.get("match_id", "")
+                if match_id.startswith("match_"):
+                    try:
+                        num = int(match_id.split("_")[1])
+                        match_numbers.append(num)
+                    except (IndexError, ValueError):
+                        continue
+            next_num = max(match_numbers, default=0) + 1
+            return f"match_{next_num}"
+        except Exception:
+            return "match_1"
+
 async def create_match(match_id: str, players_red: List[str], players_blue: List[str], 
                 captain_red: str, captain_blue: str, lobby_master: str, rank_group: str) -> Match:
     match_data = {
