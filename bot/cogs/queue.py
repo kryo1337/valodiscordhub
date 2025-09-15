@@ -17,6 +17,7 @@ from utils.db import (
     delete_test_bots,
     is_player_banned,
     is_player_timeout,
+    is_player_in_match,
 )
 from utils.rate_limit import rate_limiter
 from .match import create_match
@@ -68,6 +69,12 @@ class QueueView(discord.ui.View):
             if await is_player_timeout(user_id):
                 await interaction.response.send_message(
                     "You are in timeout and cannot join the queue!", ephemeral=True
+                )
+                return
+
+            if await is_player_in_match(user_id):
+                await interaction.response.send_message(
+                    "You are currently in an active match and cannot join the queue!", ephemeral=True
                 )
                 return
 

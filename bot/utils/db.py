@@ -86,6 +86,8 @@ async def add_to_queue(rank_group: str, discord_id: str) -> Queue:
         raise ValueError("You are banned from the queue system")
     if await is_player_timeout(discord_id):
         raise ValueError("You are in timeout and cannot join the queue")
+    if await is_player_in_match(discord_id):
+        raise ValueError("You are currently in an active match and cannot join the queue")
         
     queue = await get_queue(rank_group)
     if any(p.discord_id == discord_id for p in queue.players):
@@ -103,7 +105,7 @@ async def remove_player_from_queue(rank_group: str, discord_id: str) -> Queue:
 def calculate_mmr_points(team1_avg: float, team2_avg: float, team1_won: bool, base_points: int = 25) -> Tuple[int, int]:
     mmr_diff = team1_avg - team2_avg
     
-    adjustment = int(mmr_diff / 25)
+    adjustment = int(mmr_diff / 60)
     
     if team1_won:
         team1_points = base_points - adjustment
@@ -111,6 +113,9 @@ def calculate_mmr_points(team1_avg: float, team2_avg: float, team1_won: bool, ba
     else:
         team1_points = -(base_points + adjustment)
         team2_points = base_points - adjustment
+    
+    team1_points = max(20, min(30, team1_points))
+    team2_points = max(-30, min(-20, team2_points))
     
     return team1_points, team2_points
 
@@ -204,6 +209,16 @@ async def get_active_matches() -> List[Match]:
         return [Match(**match) for match in data]
     except Exception:
         return []
+
+async def is_player_in_match(discord_id: str) -> bool:
+    try:
+        active_matches = await get_active_matches()
+        for match in active_matches:
+            if discord_id in match.players_red or discord_id in match.players_blue:
+                return True
+        return False
+    except Exception:
+        return False
 
 async def get_leaderboard(rank_group: str) -> Leaderboard:
     try:
