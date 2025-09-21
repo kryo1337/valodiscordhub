@@ -403,8 +403,16 @@ class TeamSelectionView(discord.ui.View):
         self.current_captain_index = 0
         self.red_team: List[str] = [captains[0]]
         self.blue_team: List[str] = [captains[1]]
-        self.selection_order = [1, 2, 3, 4, 5, 6, 7, 8]
+        self.selection_pattern = [
+            (0, 1), 
+            (1, 2), 
+            (0, 2), 
+            (1, 2), 
+        ]
+        self.current_pattern_index = 0
+        self.picks_remaining_for_current_captain = 1 
         self.current_selection_index = 0
+        self.total_picks = 8 
         self.selection_message: discord.Message = None
         self.timeout_task: asyncio.Task = None
         self.last_picker: int = None
@@ -415,10 +423,10 @@ class TeamSelectionView(discord.ui.View):
         available_players = [p for p in self.players if p.discord_id not in self.red_team + self.blue_team]
         remaining_players = len(available_players)
 
-        if self.current_selection_index >= len(self.selection_order):
+        if self.current_selection_index >= self.total_picks:
             return
 
-        if available_players and self.current_selection_index < len(self.selection_order):
+        if available_players and self.current_selection_index < self.total_picks:
             self.selection_end_time = int(time.time()) + PLAYER_SELECTION_TIME
 
         current_captain = self.captains[self.current_captain_index]
@@ -428,10 +436,12 @@ class TeamSelectionView(discord.ui.View):
             color=discord.Color.dark_theme()
         )
         
-        progress = "▰" * (self.current_selection_index + 1) + "▱" * (len(self.selection_order) - self.current_selection_index - 1)
+        progress = "▰" * (self.current_selection_index + 1) + "▱" * (self.total_picks - self.current_selection_index - 1)
+        
+        captain_name = "Red" if self.current_captain_index == 0 else "Blue"
         embed.add_field(
             name="Progress",
-            value=f"`{progress}`\nSelection {self.current_selection_index + 1}/{len(self.selection_order)}",
+            value=f"`{progress}`\nSelection {self.current_selection_index + 1}/{self.total_picks}\n{captain_name} Captain: {self.picks_remaining_for_current_captain} picks remaining",
             inline=False
         )
         
@@ -469,7 +479,7 @@ class TeamSelectionView(discord.ui.View):
         embed.set_footer(text=f"Players remaining: {remaining_players}")
 
         view = discord.ui.View()
-        if available_players and self.current_selection_index < len(self.selection_order) - 1:
+        if available_players and self.current_selection_index < self.total_picks - 1:
             select_menu = discord.ui.Select(
                 placeholder="Select a player",
                 options=[
@@ -493,7 +503,7 @@ class TeamSelectionView(discord.ui.View):
                 if self.timeout_task:
                     self.timeout_task.cancel()
                 await self.select_callback(interaction, selected_id)
-                if self.current_selection_index < len(self.selection_order) - 1:
+                if self.current_selection_index < self.total_picks - 1:
                     await self.update_selection_message(message)
                 await interaction.response.defer()
 
@@ -502,7 +512,7 @@ class TeamSelectionView(discord.ui.View):
 
         await message.edit(embed=embed, view=view)
 
-        if available_players and self.current_selection_index < len(self.selection_order):
+        if available_players and self.current_selection_index < self.total_picks:
             await self.start_timeout()
 
     async def select_callback(self, interaction: discord.Interaction, selected_id: str):
@@ -512,24 +522,25 @@ class TeamSelectionView(discord.ui.View):
             self.blue_team.append(selected_id)
 
         self.current_selection_index += 1
+        self.picks_remaining_for_current_captain -= 1
         self.last_picker = self.current_captain_index
 
         available_players = [p for p in self.players if p.discord_id not in self.red_team + self.blue_team]
         if len(available_players) == 1:
             await self.assign_last_player(available_players[0].discord_id)
-        elif self.current_selection_index >= len(self.selection_order):
+        elif self.current_selection_index >= self.total_picks:
             await self.end_selection(interaction.channel)
         else:
-            self.current_captain_index = 1 - self.current_captain_index
+            if self.picks_remaining_for_current_captain == 0:
+                self.current_pattern_index += 1
+                if self.current_pattern_index < len(self.selection_pattern):
+                    self.current_captain_index, self.picks_remaining_for_current_captain = self.selection_pattern[self.current_pattern_index]
+                
             self.selection_end_time = int(time.time()) + PLAYER_SELECTION_TIME
             await self.update_selection_message(self.selection_message)
 
     async def assign_last_player(self, last_player_id: str):
-        if self.last_picker == 0:
-            self.blue_team.append(last_player_id)
-        else:
-            self.red_team.append(last_player_id)
-
+        self.red_team.append(last_player_id)
         self.current_selection_index += 1
         await self.end_selection(self.selection_message.channel)
 
@@ -561,15 +572,21 @@ class TeamSelectionView(discord.ui.View):
                 self.blue_team.append(selected_player.discord_id)
 
         self.current_selection_index += 1
+        self.picks_remaining_for_current_captain -= 1
         self.last_picker = self.current_captain_index
 
         available_players = [p for p in self.players if p.discord_id not in self.red_team + self.blue_team]
+        
         if len(available_players) == 1:
             await self.assign_last_player(available_players[0].discord_id)
-        elif self.current_selection_index >= len(self.selection_order):
+        elif self.current_selection_index >= self.total_picks:
             await self.end_selection(self.selection_message.channel)
         else:
-            self.current_captain_index = 1 - self.current_captain_index
+            if self.picks_remaining_for_current_captain == 0:
+                self.current_pattern_index += 1
+                if self.current_pattern_index < len(self.selection_pattern):
+                    self.current_captain_index, self.picks_remaining_for_current_captain = self.selection_pattern[self.current_pattern_index]
+                    
             self.selection_end_time = int(time.time()) + PLAYER_SELECTION_TIME
             await self.update_selection_message(self.selection_message)
 
@@ -625,7 +642,7 @@ class TeamSelectionView(discord.ui.View):
             user_limit=5
         )
 
-        map_ban_starter = 1 - self.last_picker
+        map_ban_starter = 0 
         map_view = MapBanningView(self.match_id, self.red_team, self.blue_team, self.captains, map_ban_starter, red_vc, blue_vc)
 
         if self.selection_message:
@@ -1105,6 +1122,10 @@ class ScoreSubmissionView(discord.ui.View):
     async def update_message(self, message: discord.Message):
         self.message = message
         
+        current_time = time.time()
+        if not self.score_submission_enabled and (current_time - self.start_time) >= 300:
+            self.score_submission_enabled = True
+        
         embed = discord.Embed(
             title="Score Submission",
             description="Captains, please submit the match score:",
@@ -1217,7 +1238,7 @@ class ScoreSubmissionView(discord.ui.View):
             red_wins_points = calculate_mmr_points(red_avg, blue_avg, True)
             blue_wins_points = calculate_mmr_points(red_avg, blue_avg, False)
             
-            return red_wins_points[0], blue_wins_points[1], red_wins_points[1], blue_wins_points[0], red_avg, blue_avg
+            return red_wins_points[0], blue_wins_points[1], blue_wins_points[0], red_wins_points[1], red_avg, blue_avg
         except Exception:
             return 25, 25, -25, -25, 1000, 1000
 
