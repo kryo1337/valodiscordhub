@@ -11,25 +11,40 @@ services:
       - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
   db-init:
     build: ./db
     depends_on:
       - mongo
     environment:
       - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/valodiscordhub?authSource=admin
+    env_file:
+      - .env
 
   api:
     build: ./api
     depends_on:
       - mongo
+      - redis
       - db-init
     environment:
       - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/valodiscordhub?authSource=admin
       - MONGODB_DB=valodiscordhub
+      - REDIS_URL=redis://redis:6379/0
     ports:
       - "8000:8000"
     env_file:
       - .env
+    restart: unless-stopped
 
   bot:
     build: ./bot
@@ -39,12 +54,15 @@ services:
       - api
     environment:
       - API_BASE_URL=http://api:8000
+      - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/valodiscordhub?authSource=admin
       - PYTHONPATH=/bot:/bot/..
     env_file:
       - .env
     dns:
       - 8.8.8.8
       - 8.8.4.4
+    restart: unless-stopped
 
 volumes:
   mongo_data:
+  redis_data:

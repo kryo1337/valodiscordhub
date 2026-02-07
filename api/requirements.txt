@@ -2,6 +2,8 @@ fastapi
 uvicorn[standard]
 motor
 pydantic
+pydantic-settings
 python-dotenv
 python-jose[cryptography]
 httpx
+redis>=5.0.0

@@ -1,12 +1,19 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from utils.db import get_player_rank, get_leaderboard_page, get_player, get_player_match_history
+from utils.db import (
+    get_player_rank,
+    get_leaderboard_page,
+    get_player,
+    get_player_match_history,
+)
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID"))
+
 
 class StatsCog(commands.Cog):
     def __init__(self, bot):
@@ -30,21 +37,17 @@ class StatsCog(commands.Cog):
         if channel:
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(
-                    view_channel=False,
-                    send_messages=False
+                    view_channel=False, send_messages=False
                 ),
                 guild.me: discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    manage_channels=True
+                    view_channel=True, send_messages=True, manage_channels=True
                 ),
             }
             for role_name in ["iron-plat", "dia-asc", "imm-radiant"]:
                 role = discord.utils.get(guild.roles, name=role_name)
                 if role:
                     overwrites[role] = discord.PermissionOverwrite(
-                        view_channel=True,
-                        send_messages=False
+                        view_channel=True, send_messages=False
                     )
             await channel.edit(overwrites=overwrites)
 
@@ -67,13 +70,10 @@ class StatsCog(commands.Cog):
 
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(
-                view_channel=False,
-                send_messages=False
+                view_channel=False, send_messages=False
             ),
             interaction.guild.me: discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                manage_channels=True
+                view_channel=True, send_messages=True, manage_channels=True
             ),
         }
 
@@ -81,32 +81,33 @@ class StatsCog(commands.Cog):
             role = discord.utils.get(interaction.guild.roles, name=role_name)
             if role:
                 overwrites[role] = discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=False
+                    view_channel=True, send_messages=False
                 )
 
         channel = await category.create_text_channel(
-            name="stats",
-            overwrites=overwrites
+            name="stats", overwrites=overwrites
         )
 
         self.stats_channels[channel.id] = True
         await self.update_stats_display(channel)
-        await interaction.followup.send("✅ Stats channel has been set up!", ephemeral=True)
+        await interaction.followup.send(
+            "✅ Stats channel has been set up!", ephemeral=True
+        )
 
     async def update_stats_display(self, channel: discord.TextChannel):
         await channel.purge()
         embed = discord.Embed(
             title="Player Statistics",
             description="Click a button below to view statistics!",
-            color=discord.Color.dark_theme()
+            color=discord.Color.dark_theme(),
         )
-        
+
         view = discord.ui.View(timeout=None)
         view.add_item(ShowMyStatsButton(self))
         view.add_item(SearchStatsButton(self))
         view.add_item(ShowHistoryButton(self))
         await channel.send(embed=embed, view=view)
+
 
 class ShowMyStatsButton(discord.ui.Button):
     def __init__(self, cog):
@@ -114,18 +115,20 @@ class ShowMyStatsButton(discord.ui.Button):
             label="My Stats",
             style=discord.ButtonStyle.primary,
             emoji="📊",
-            custom_id="show_my_stats"
+            custom_id="show_my_stats",
         )
         self.cog = cog
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        
+
         target_user = interaction.user
         target_id = str(target_user.id)
         db_player = await get_player(target_id)
         if not db_player:
-            await interaction.followup.send(f"{target_user.mention} is not registered!", ephemeral=True)
+            await interaction.followup.send(
+                f"{target_user.mention} is not registered!", ephemeral=True
+            )
             return
 
         rank_group = None
@@ -135,17 +138,22 @@ class ShowMyStatsButton(discord.ui.Button):
                 break
 
         if not rank_group:
-            await interaction.followup.send(f"{target_user.mention} doesn't have a valid rank group role!", ephemeral=True)
+            await interaction.followup.send(
+                f"{target_user.mention} doesn't have a valid rank group role!",
+                ephemeral=True,
+            )
             return
 
         player = await get_player_rank(rank_group, target_id)
         if not player:
-            await interaction.followup.send(f"{target_user.mention} hasn't played any matches yet!", ephemeral=True)
+            await interaction.followup.send(
+                f"{target_user.mention} hasn't played any matches yet!", ephemeral=True
+            )
             return
 
         all_players = await get_leaderboard_page(rank_group, 1, 1000)
         sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
-        
+
         position = None
         for i, p in enumerate(sorted_players, start=1):
             if p.discord_id == player.discord_id:
@@ -154,15 +162,15 @@ class ShowMyStatsButton(discord.ui.Button):
 
         embed = discord.Embed(
             title=f"Player Statistics - {target_user.display_name}",
-            color=discord.Color.dark_theme()
+            color=discord.Color.dark_theme(),
         )
-        
+
         rank_group_display = {
             "iron-plat": "Iron - Platinum",
             "dia-asc": "Diamond - Ascendant",
-            "imm-radiant": "Immortal - Radiant"
+            "imm-radiant": "Immortal - Radiant",
         }
-        
+
         streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
         embed.add_field(
             name="Rank Information",
@@ -171,9 +179,9 @@ class ShowMyStatsButton(discord.ui.Button):
                 f"• Group: {rank_group_display[rank_group]}\n"
                 f"• Position: #{position}"
             ),
-            inline=False
+            inline=False,
         )
-        
+
         embed.add_field(
             name="📊 Statistics",
             value=(
@@ -184,10 +192,11 @@ class ShowMyStatsButton(discord.ui.Button):
                 f"• Winrate: {player.winrate:.2f}%\n"
                 f"{streak_text}"
             ),
-            inline=False
+            inline=False,
         )
-        
+
         await interaction.followup.send(embed=embed, ephemeral=True)
+
 
 class SearchStatsButton(discord.ui.Button):
     def __init__(self, cog):
@@ -195,7 +204,7 @@ class SearchStatsButton(discord.ui.Button):
             label="Search Player",
             style=discord.ButtonStyle.secondary,
             emoji="🔍",
-            custom_id="search_stats"
+            custom_id="search_stats",
         )
         self.cog = cog
 
@@ -203,13 +212,14 @@ class SearchStatsButton(discord.ui.Button):
         modal = SearchStatsModal(self.cog)
         await interaction.response.send_modal(modal)
 
+
 class ShowHistoryButton(discord.ui.Button):
     def __init__(self, cog):
         super().__init__(
             label="Show History",
             style=discord.ButtonStyle.success,
             emoji="📜",
-            custom_id="show_history"
+            custom_id="show_history",
         )
         self.cog = cog
 
@@ -226,7 +236,7 @@ class HistoryLimitModal(discord.ui.Modal, title="Match History Limit"):
             placeholder="Enter a number between 1 and 20",
             required=True,
             min_length=1,
-            max_length=2
+            max_length=2,
         )
         self.add_item(self.limit_input)
 
@@ -236,29 +246,37 @@ class HistoryLimitModal(discord.ui.Modal, title="Match History Limit"):
         try:
             limit = int(str(self.limit_input.value).strip())
         except ValueError:
-            await interaction.followup.send("❌ Please enter a valid number between 1 and 20.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ Please enter a valid number between 1 and 20.", ephemeral=True
+            )
             return
 
         if limit < 1 or limit > 20:
-            await interaction.followup.send("❌ Number must be between 1 and 20.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ Number must be between 1 and 20.", ephemeral=True
+            )
             return
 
         target_user = interaction.user
         target_id = str(target_user.id)
         db_player = await get_player(target_id)
         if not db_player:
-            await interaction.followup.send(f"{target_user.mention} is not registered!", ephemeral=True)
+            await interaction.followup.send(
+                f"{target_user.mention} is not registered!", ephemeral=True
+            )
             return
 
         matches = await get_player_match_history(target_id, limit=limit)
         if not matches:
-            await interaction.followup.send(f"{target_user.mention} hasn't played any matches yet!", ephemeral=True)
+            await interaction.followup.send(
+                f"{target_user.mention} hasn't played any matches yet!", ephemeral=True
+            )
             return
 
         rank_group_display = {
             "iron-plat": "Iron - Platinum",
             "dia-asc": "Diamond - Ascendant",
-            "imm-radiant": "Immortal - Radiant"
+            "imm-radiant": "Immortal - Radiant",
         }
 
         for match in matches:
@@ -275,34 +293,46 @@ class HistoryLimitModal(discord.ui.Modal, title="Match History Limit"):
 
             red_side = "⚔️ Attack" if match.defense_start == "blue" else "🛡️ Defense"
             blue_side = "⚔️ Attack" if match.defense_start == "red" else "🛡️ Defense"
-            user_result = "✅ Won" if (
-                (match.result == "red" and target_id in match.players_red) or
-                (match.result == "blue" and target_id in match.players_blue)
-            ) else "❌ Lost"
+            user_result = (
+                "✅ Won"
+                if (
+                    (match.result == "red" and target_id in match.players_red)
+                    or (match.result == "blue" and target_id in match.players_blue)
+                )
+                else "❌ Lost"
+            )
 
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
                 description=f"Rank Group: {rank_group_display[match.rank_group]}",
                 color=discord.Color.dark_theme(),
-                timestamp=match.created_at
+                timestamp=match.created_at,
             )
 
             embed.add_field(
                 name=f"🔴 Red Team {red_side}",
                 value=(
-                    f"• Captain: <@{match.players_red[0]}>\n" +
-                    ("\n".join([f"• <@{pid}>" for pid in match.players_red[1:]]) if len(match.players_red) > 1 else "")
+                    f"• Captain: <@{match.players_red[0]}>\n"
+                    + (
+                        "\n".join([f"• <@{pid}>" for pid in match.players_red[1:]])
+                        if len(match.players_red) > 1
+                        else ""
+                    )
                 ),
-                inline=True
+                inline=True,
             )
 
             embed.add_field(
                 name=f"🔵 Blue Team {blue_side}",
                 value=(
-                    f"• Captain: <@{match.players_blue[0]}>\n" +
-                    ("\n".join([f"• <@{pid}>" for pid in match.players_blue[1:]]) if len(match.players_blue) > 1 else "")
+                    f"• Captain: <@{match.players_blue[0]}>\n"
+                    + (
+                        "\n".join([f"• <@{pid}>" for pid in match.players_blue[1:]])
+                        if len(match.players_blue) > 1
+                        else ""
+                    )
                 ),
-                inline=True
+                inline=True,
             )
 
             embed.add_field(
@@ -314,10 +344,11 @@ class HistoryLimitModal(discord.ui.Modal, title="Match History Limit"):
                     f"Duration: {duration_str}\n"
                     f"Date: {match.created_at.strftime('%Y-%m-%d %H:%M')}\n"
                 ),
-                inline=False
+                inline=False,
             )
 
             await interaction.followup.send(embed=embed, ephemeral=True)
+
 
 class SearchStatsModal(discord.ui.Modal, title="Search Player Stats"):
     def __init__(self, cog):
@@ -328,21 +359,24 @@ class SearchStatsModal(discord.ui.Modal, title="Search Player Stats"):
             placeholder="Enter the player's Discord username",
             required=True,
             min_length=2,
-            max_length=32
+            max_length=32,
         )
         self.add_item(self.username)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        
+
         guild = interaction.guild
         found_user = None
-        
+
         async for member in guild.fetch_members():
-            if member.name.lower() == self.username.value.lower() or member.display_name.lower() == self.username.value.lower():
+            if (
+                member.name.lower() == self.username.value.lower()
+                or member.display_name.lower() == self.username.value.lower()
+            ):
                 found_user = member
                 break
-        
+
         if not found_user:
             await interaction.followup.send("❌ Player not found!", ephemeral=True)
             return
@@ -350,7 +384,9 @@ class SearchStatsModal(discord.ui.Modal, title="Search Player Stats"):
         target_id = str(found_user.id)
         db_player = await get_player(target_id)
         if not db_player:
-            await interaction.followup.send(f"{found_user.mention} is not registered!", ephemeral=True)
+            await interaction.followup.send(
+                f"{found_user.mention} is not registered!", ephemeral=True
+            )
             return
 
         rank_group = None
@@ -360,17 +396,22 @@ class SearchStatsModal(discord.ui.Modal, title="Search Player Stats"):
                 break
 
         if not rank_group:
-            await interaction.followup.send(f"{found_user.mention} doesn't have a valid rank group role!", ephemeral=True)
+            await interaction.followup.send(
+                f"{found_user.mention} doesn't have a valid rank group role!",
+                ephemeral=True,
+            )
             return
 
         player = await get_player_rank(rank_group, target_id)
         if not player:
-            await interaction.followup.send(f"{found_user.mention} hasn't played any matches yet!", ephemeral=True)
+            await interaction.followup.send(
+                f"{found_user.mention} hasn't played any matches yet!", ephemeral=True
+            )
             return
 
         all_players = await get_leaderboard_page(rank_group, 1, 1000)
         sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
-        
+
         position = None
         for i, p in enumerate(sorted_players, start=1):
             if p.discord_id == player.discord_id:
@@ -379,15 +420,15 @@ class SearchStatsModal(discord.ui.Modal, title="Search Player Stats"):
 
         embed = discord.Embed(
             title=f"Player Statistics - {found_user.display_name}",
-            color=discord.Color.dark_theme()
+            color=discord.Color.dark_theme(),
         )
-        
+
         rank_group_display = {
             "iron-plat": "Iron - Platinum",
             "dia-asc": "Diamond - Ascendant",
-            "imm-radiant": "Immortal - Radiant"
+            "imm-radiant": "Immortal - Radiant",
         }
-        
+
         streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
         embed.add_field(
             name="Rank Information",
@@ -396,9 +437,9 @@ class SearchStatsModal(discord.ui.Modal, title="Search Player Stats"):
                 f"• Group: {rank_group_display[rank_group]}\n"
                 f"• Position: #{position}"
             ),
-            inline=False
+            inline=False,
         )
-        
+
         embed.add_field(
             name="📊 Statistics",
             value=(
@@ -409,10 +450,11 @@ class SearchStatsModal(discord.ui.Modal, title="Search Player Stats"):
                 f"• Winrate: {player.winrate:.2f}%\n"
                 f"{streak_text}"
             ),
-            inline=False
+            inline=False,
         )
-        
+
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+
 async def setup(bot):
-    await bot.add_cog(StatsCog(bot)) 
+    await bot.add_cog(StatsCog(bot))

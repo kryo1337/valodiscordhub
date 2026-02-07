@@ -1,13 +1,20 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from utils.db import get_leaderboard_page, get_player, get_user_preferences, save_user_preferences
+from utils.db import (
+    get_leaderboard_page,
+    get_player,
+    get_user_preferences,
+    save_user_preferences,
+)
 from models.preferences import UserPreferences
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID"))
+
 
 class UserLeaderboardView(discord.ui.View):
     def __init__(self, cog, interaction, user_prefs, total_pages):
@@ -27,7 +34,10 @@ class UserLeaderboardView(discord.ui.View):
 
     async def update_display(self, interaction: discord.Interaction = None):
         await save_user_preferences(self.user_prefs)
-        await self.cog.update_user_leaderboard_display(interaction or self.interaction, self.user_prefs, self)
+        await self.cog.update_user_leaderboard_display(
+            interaction or self.interaction, self.user_prefs, self
+        )
+
 
 class RankGroupSelect(discord.ui.Select):
     def __init__(self, view):
@@ -46,14 +56,14 @@ class RankGroupSelect(discord.ui.Select):
                 label="Immortal - Radiant",
                 value="imm-radiant",
                 description="View Immortal to Radiant leaderboard",
-            )
+            ),
         ]
         super().__init__(
             placeholder="Select rank group",
             min_values=1,
             max_values=1,
             options=options,
-            custom_id="rank_group"
+            custom_id="rank_group",
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -62,13 +72,14 @@ class RankGroupSelect(discord.ui.Select):
         self.view.user_prefs.page = 1
         await self.view.update_display(interaction)
 
+
 class FirstPageButton(discord.ui.Button):
     def __init__(self, view):
         super().__init__(
             label="First",
             emoji="⏮️",
             style=discord.ButtonStyle.secondary,
-            custom_id="first_page"
+            custom_id="first_page",
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -76,13 +87,14 @@ class FirstPageButton(discord.ui.Button):
         self.view.user_prefs.page = 1
         await self.view.update_display(interaction)
 
+
 class PreviousPageButton(discord.ui.Button):
     def __init__(self, view):
         super().__init__(
             label="Previous",
             emoji="◀️",
             style=discord.ButtonStyle.secondary,
-            custom_id="prev_page"
+            custom_id="prev_page",
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -91,13 +103,14 @@ class PreviousPageButton(discord.ui.Button):
             self.view.user_prefs.page -= 1
         await self.view.update_display(interaction)
 
+
 class NextPageButton(discord.ui.Button):
     def __init__(self, view):
         super().__init__(
             label="Next",
             emoji="▶️",
             style=discord.ButtonStyle.secondary,
-            custom_id="next_page"
+            custom_id="next_page",
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -106,13 +119,14 @@ class NextPageButton(discord.ui.Button):
             self.view.user_prefs.page += 1
         await self.view.update_display(interaction)
 
+
 class LastPageButton(discord.ui.Button):
     def __init__(self, view):
         super().__init__(
             label="Last",
             emoji="⏭️",
             style=discord.ButtonStyle.secondary,
-            custom_id="last_page"
+            custom_id="last_page",
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -120,14 +134,11 @@ class LastPageButton(discord.ui.Button):
         self.view.user_prefs.page = self.view.total_pages
         await self.view.update_display(interaction)
 
+
 class PageSizeSelect(discord.ui.Select):
     def __init__(self, view):
         options = [
-            discord.SelectOption(
-                label=f"{size} players",
-                value=str(size),
-                emoji="👥"
-            )
+            discord.SelectOption(label=f"{size} players", value=str(size), emoji="👥")
             for size in view.cog.page_sizes
         ]
         super().__init__(
@@ -135,7 +146,7 @@ class PageSizeSelect(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=options,
-            custom_id="page_size"
+            custom_id="page_size",
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -144,30 +155,32 @@ class PageSizeSelect(discord.ui.Select):
         self.view.user_prefs.page = 1
         await self.view.update_display(interaction)
 
+
 class ShowLeaderboardButton(discord.ui.Button):
     def __init__(self, cog):
         super().__init__(
             label="Show Leaderboard",
             style=discord.ButtonStyle.primary,
             emoji="📊",
-            custom_id="show_leaderboard"
+            custom_id="show_leaderboard",
         )
         self.cog = cog
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        
+
         user_prefs = await get_user_preferences(str(interaction.user.id))
         if not user_prefs:
             user_prefs = UserPreferences(
                 discord_id=str(interaction.user.id),
                 rank_group="imm-radiant",
                 page=1,
-                page_size=10
+                page_size=10,
             )
-        
+
         view = UserLeaderboardView(self.cog, interaction, user_prefs, 1)
         await self.cog.update_user_leaderboard_display(interaction, user_prefs, view)
+
 
 class LeaderboardCog(commands.Cog):
     def __init__(self, bot):
@@ -192,21 +205,17 @@ class LeaderboardCog(commands.Cog):
         if channel:
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(
-                    view_channel=False,
-                    send_messages=False
+                    view_channel=False, send_messages=False
                 ),
                 guild.me: discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    manage_channels=True
+                    view_channel=True, send_messages=True, manage_channels=True
                 ),
             }
             for role_name in ["iron-plat", "dia-asc", "imm-radiant"]:
                 role = discord.utils.get(guild.roles, name=role_name)
                 if role:
                     overwrites[role] = discord.PermissionOverwrite(
-                        view_channel=True,
-                        send_messages=False
+                        view_channel=True, send_messages=False
                     )
             await channel.edit(overwrites=overwrites)
 
@@ -215,12 +224,12 @@ class LeaderboardCog(commands.Cog):
                     await message.delete()
                 except discord.NotFound:
                     pass
-            
+
             self.leaderboard_channels[channel.id] = {
                 "rank_group": "imm-radiant",
-                "page": 1
+                "page": 1,
             }
-            
+
             await self.update_leaderboard_display(channel)
 
     @app_commands.command(name="setup_leaderboard")
@@ -239,13 +248,10 @@ class LeaderboardCog(commands.Cog):
 
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(
-                view_channel=False,
-                send_messages=False
+                view_channel=False, send_messages=False
             ),
             interaction.guild.me: discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                manage_channels=True
+                view_channel=True, send_messages=True, manage_channels=True
             ),
         }
 
@@ -253,37 +259,34 @@ class LeaderboardCog(commands.Cog):
             role = discord.utils.get(interaction.guild.roles, name=role_name)
             if role:
                 overwrites[role] = discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=False
+                    view_channel=True, send_messages=False
                 )
 
         channel = await category.create_text_channel(
-            name="leaderboard",
-            overwrites=overwrites
+            name="leaderboard", overwrites=overwrites
         )
 
-        self.leaderboard_channels[channel.id] = {
-            "rank_group": "imm-radiant",
-            "page": 1
-        }
+        self.leaderboard_channels[channel.id] = {"rank_group": "imm-radiant", "page": 1}
 
         await self.update_leaderboard_display(channel)
-        await interaction.followup.send("✅ Leaderboard channel has been set up!", ephemeral=True)
+        await interaction.followup.send(
+            "✅ Leaderboard channel has been set up!", ephemeral=True
+        )
 
     @app_commands.command(name="leaderboard")
     @app_commands.guilds(discord.Object(id=GUILD_ID))
     async def show_leaderboard(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        
+
         user_prefs = await get_user_preferences(str(interaction.user.id))
         if not user_prefs:
             user_prefs = UserPreferences(
                 discord_id=str(interaction.user.id),
                 rank_group="imm-radiant",
                 page=1,
-                page_size=10
+                page_size=10,
             )
-        
+
         view = UserLeaderboardView(self, interaction, user_prefs, 1)
         await self.update_user_leaderboard_display(interaction, user_prefs, view)
 
@@ -296,26 +299,31 @@ class LeaderboardCog(commands.Cog):
         embed = discord.Embed(
             title="Valorant Leaderboard",
             description="Click the button below to view the leaderboard!",
-            color=discord.Color.blue()
+            color=discord.Color.blue(),
         )
-        
+
         view = discord.ui.View(timeout=None)
         view.add_item(ShowLeaderboardButton(self))
         await channel.send(embed=embed, view=view)
 
-    async def update_user_leaderboard_display(self, interaction: discord.Interaction, user_prefs: UserPreferences, view: UserLeaderboardView = None):
+    async def update_user_leaderboard_display(
+        self,
+        interaction: discord.Interaction,
+        user_prefs: UserPreferences,
+        view: UserLeaderboardView = None,
+    ):
         rank_group = user_prefs.rank_group
         page = user_prefs.page
         page_size = user_prefs.page_size
 
         all_players = await get_leaderboard_page(rank_group, 1, 1000)
         sorted_players = sorted(all_players, key=lambda x: x.points, reverse=True)
-        
+
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         players = sorted_players[start_idx:end_idx]
         total_pages = max(1, (len(sorted_players) + page_size - 1) // page_size)
-        
+
         if page > total_pages:
             user_prefs.page = total_pages
             page = total_pages
@@ -326,26 +334,32 @@ class LeaderboardCog(commands.Cog):
         rank_group_colors = {
             "iron-plat": discord.Color.blue(),
             "dia-asc": discord.Color.green(),
-            "imm-radiant": discord.Color.red()
+            "imm-radiant": discord.Color.red(),
         }
-        
+
         embed = discord.Embed(
             title=f"🏆 Leaderboard - {rank_group.upper()}",
-            color=rank_group_colors[rank_group]
+            color=rank_group_colors[rank_group],
         )
 
         for i, player in enumerate(players, start=start_idx + 1):
             streak_text = f"🔥 {player.streak}" if player.streak >= 3 else ""
             try:
-                discord_user = await interaction.guild.fetch_member(int(player.discord_id))
-                name = discord_user.display_name if discord_user else f"<@{player.discord_id}>"
+                discord_user = await interaction.guild.fetch_member(
+                    int(player.discord_id)
+                )
+                name = (
+                    discord_user.display_name
+                    if discord_user
+                    else f"<@{player.discord_id}>"
+                )
             except:
                 name = f"<@{player.discord_id}>"
-            
+
             db_player = await get_player(player.discord_id)
             if not db_player:
                 continue
-            
+
             value = (
                 f"• Rank: {db_player.rank}\n"
                 f"• Points: {player.points}\n"
@@ -355,19 +369,26 @@ class LeaderboardCog(commands.Cog):
             )
             embed.add_field(name=f"#{i} {name}", value=value, inline=False)
 
-        embed.set_footer(text=f"📄 Page {page}/{total_pages} | 👥 {page_size} players per page")
+        embed.set_footer(
+            text=f"📄 Page {page}/{total_pages} | 👥 {page_size} players per page"
+        )
 
         if view:
             view.total_pages = total_pages
-            
+
         if view and view.message:
             await view.message.edit(embed=embed, view=view)
         else:
             if view:
-                view.message = await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+                view.message = await interaction.followup.send(
+                    embed=embed, view=view, ephemeral=True
+                )
             else:
                 view = UserLeaderboardView(self, interaction, user_prefs, total_pages)
-                view.message = await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+                view.message = await interaction.followup.send(
+                    embed=embed, view=view, ephemeral=True
+                )
+
 
 async def setup(bot):
-    await bot.add_cog(LeaderboardCog(bot)) 
+    await bot.add_cog(LeaderboardCog(bot))

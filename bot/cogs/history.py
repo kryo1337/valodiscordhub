@@ -6,10 +6,12 @@ from datetime import datetime, timezone
 from utils.db import get_match_history
 from models.match import Match
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID"))
+
 
 class HistoryCog(commands.Cog):
     def __init__(self, bot):
@@ -33,13 +35,10 @@ class HistoryCog(commands.Cog):
         if channel:
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(
-                    view_channel=False,
-                    send_messages=False
+                    view_channel=False, send_messages=False
                 ),
                 guild.me: discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    manage_channels=True
+                    view_channel=True, send_messages=True, manage_channels=True
                 ),
             }
 
@@ -47,8 +46,7 @@ class HistoryCog(commands.Cog):
                 role = discord.utils.get(guild.roles, name=role_name)
                 if role:
                     overwrites[role] = discord.PermissionOverwrite(
-                        view_channel=True,
-                        send_messages=False
+                        view_channel=True, send_messages=False
                     )
 
             await channel.edit(overwrites=overwrites)
@@ -70,13 +68,10 @@ class HistoryCog(commands.Cog):
 
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(
-                view_channel=False,
-                send_messages=False
+                view_channel=False, send_messages=False
             ),
             interaction.guild.me: discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                manage_channels=True
+                view_channel=True, send_messages=True, manage_channels=True
             ),
         }
 
@@ -84,18 +79,18 @@ class HistoryCog(commands.Cog):
             role = discord.utils.get(interaction.guild.roles, name=role_name)
             if role:
                 overwrites[role] = discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=False
+                    view_channel=True, send_messages=False
                 )
 
         channel = await category.create_text_channel(
-            name="history",
-            overwrites=overwrites
+            name="history", overwrites=overwrites
         )
 
         self.history_channels[channel.id] = True
         await self.update_history_display(channel)
-        await interaction.followup.send("✅ History channel has been set up!", ephemeral=True)
+        await interaction.followup.send(
+            "✅ History channel has been set up!", ephemeral=True
+        )
 
     async def update_history_display(self, channel: discord.TextChannel):
         await channel.purge()
@@ -111,10 +106,10 @@ class HistoryCog(commands.Cog):
 
             red_team = [f"<@{id}>" for id in match.players_red]
             blue_team = [f"<@{id}>" for id in match.players_blue]
-            
+
             red_team[0] = f"{red_team[0]} 👑"
             blue_team[0] = f"{blue_team[0]} 👑"
-            
+
             duration = match.duration
             if duration:
                 hours, remainder = divmod(duration.seconds, 3600)
@@ -122,34 +117,36 @@ class HistoryCog(commands.Cog):
                 duration_str = f"{hours}h {minutes}m {seconds}s"
             else:
                 duration_str = "N/A"
-            
+
             rank_group_display = {
                 "iron-plat": "Iron - Platinum",
                 "dia-asc": "Diamond - Ascendant",
-                "imm-radiant": "Immortal - Radiant"
+                "imm-radiant": "Immortal - Radiant",
             }
 
             red_side = "⚔️ Attack" if match.defense_start == "blue" else "🛡️ Defense"
             blue_side = "⚔️ Attack" if match.defense_start == "red" else "🛡️ Defense"
-            
+
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
                 description=f"**Rank Group: {rank_group_display[match.rank_group]}**",
                 color=discord.Color.dark_theme(),
-                timestamp=match.created_at
+                timestamp=match.created_at,
             )
-            
+
             embed.add_field(
                 name=f"🔴 Red Team {red_side}",
-                value=f"• Captain: <@{match.players_red[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_red[1:]]),
-                inline=True
+                value=f"• Captain: <@{match.players_red[0]}>\n"
+                + "\n".join([f"• <@{id}>" for id in match.players_red[1:]]),
+                inline=True,
             )
             embed.add_field(
                 name=f"🔵 Blue Team {blue_side}",
-                value=f"• Captain: <@{match.players_blue[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_blue[1:]]),
-                inline=True
+                value=f"• Captain: <@{match.players_blue[0]}>\n"
+                + "\n".join([f"• <@{id}>" for id in match.players_blue[1:]]),
+                inline=True,
             )
-            
+
             embed.add_field(
                 name="Match Details",
                 value=(
@@ -159,7 +156,7 @@ class HistoryCog(commands.Cog):
                     f"Duration: {duration_str}\n"
                     f"Date: {match.created_at.strftime('%Y-%m-%d %H:%M')}"
                 ),
-                inline=False
+                inline=False,
             )
 
             await channel.send(embed=embed)
@@ -172,10 +169,10 @@ class HistoryCog(commands.Cog):
 
             red_team = [f"<@{id}>" for id in match.players_red]
             blue_team = [f"<@{id}>" for id in match.players_blue]
-            
+
             red_team[0] = f"👑 {red_team[0]}"
             blue_team[0] = f"👑 {blue_team[0]}"
-            
+
             duration = match.duration
             if duration:
                 hours, remainder = divmod(duration.seconds, 3600)
@@ -183,34 +180,36 @@ class HistoryCog(commands.Cog):
                 duration_str = f"{hours}h {minutes}m {seconds}s"
             else:
                 duration_str = "N/A"
-            
+
             rank_group_display = {
                 "iron-plat": "Iron - Platinum",
                 "dia-asc": "Diamond - Ascendant",
-                "imm-radiant": "Immortal - Radiant"
+                "imm-radiant": "Immortal - Radiant",
             }
 
             red_side = "⚔️ Attack" if match.defense_start == "blue" else "🛡️ Defense"
             blue_side = "⚔️ Attack" if match.defense_start == "red" else "🛡️ Defense"
-            
+
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
                 description=f"**Rank Group: {rank_group_display[match.rank_group]}**",
                 color=discord.Color.dark_theme(),
-                timestamp=match.created_at
+                timestamp=match.created_at,
             )
-            
+
             embed.add_field(
                 name=f"🔴 Red Team {red_side}",
-                value=f"• Captain: <@{match.players_red[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_red[1:]]),
-                inline=True
+                value=f"• Captain: <@{match.players_red[0]}>\n"
+                + "\n".join([f"• <@{id}>" for id in match.players_red[1:]]),
+                inline=True,
             )
             embed.add_field(
                 name=f"🔵 Blue Team {blue_side}",
-                value=f"• Captain: <@{match.players_blue[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_blue[1:]]),
-                inline=True
+                value=f"• Captain: <@{match.players_blue[0]}>\n"
+                + "\n".join([f"• <@{id}>" for id in match.players_blue[1:]]),
+                inline=True,
             )
-            
+
             embed.add_field(
                 name="Match Details",
                 value=(
@@ -220,7 +219,7 @@ class HistoryCog(commands.Cog):
                     f"Duration: {duration_str}\n"
                     f"Date: {match.created_at.strftime('%Y-%m-%d %H:%M')}"
                 ),
-                inline=False
+                inline=False,
             )
 
             await channel.send(embed=embed)
@@ -228,15 +227,12 @@ class HistoryCog(commands.Cog):
     @commands.command(name="history")
     async def history(self, ctx, limit: int = 10):
         matches = await get_match_history(limit)
-        
+
         if not matches:
             await ctx.send("No match history found.")
             return
 
-        embed = discord.Embed(
-            title="Match History",
-            color=discord.Color.dark_theme()
-        )
+        embed = discord.Embed(title="Match History", color=discord.Color.dark_theme())
 
         for match in matches:
             if match.result == "cancelled":
@@ -244,13 +240,21 @@ class HistoryCog(commands.Cog):
 
             red_team = [f"<@{id}>" for id in match.players_red]
             blue_team = [f"<@{id}>" for id in match.players_blue]
-            
+
             red_team[0] = f"👑 {red_team[0]}"
             blue_team[0] = f"👑 {blue_team[0]}"
-            
-            red_team_str = f"**{', '.join(red_team)}**" if match.result == "red" else f"{', '.join(red_team)}"
-            blue_team_str = f"**{', '.join(blue_team)}**" if match.result == "blue" else f"{', '.join(blue_team)}"
-            
+
+            red_team_str = (
+                f"**{', '.join(red_team)}**"
+                if match.result == "red"
+                else f"{', '.join(red_team)}"
+            )
+            blue_team_str = (
+                f"**{', '.join(blue_team)}**"
+                if match.result == "blue"
+                else f"{', '.join(blue_team)}"
+            )
+
             duration = match.duration
             if duration:
                 hours, remainder = divmod(duration.seconds, 3600)
@@ -258,16 +262,16 @@ class HistoryCog(commands.Cog):
                 duration_str = f"{hours}h {minutes}m {seconds}s"
             else:
                 duration_str = "N/A"
-            
+
             rank_group_display = {
                 "iron-plat": "Iron - Platinum",
                 "dia-asc": "Diamond - Ascendant",
-                "imm-radiant": "Immortal - Radiant"
+                "imm-radiant": "Immortal - Radiant",
             }
 
             red_side = "⚔️ Attack" if match.defense_start == "blue" else "🛡️ Defense"
             blue_side = "⚔️ Attack" if match.defense_start == "red" else "🛡️ Defense"
-            
+
             embed.add_field(
                 name=f"Match {match.match_id}",
                 value=(
@@ -278,7 +282,7 @@ class HistoryCog(commands.Cog):
                     f"Created: {match.created_at.strftime('%Y-%m-%d %H:%M')}\n"
                     f"Duration: {duration_str}"
                 ),
-                inline=False
+                inline=False,
             )
 
         await ctx.send(embed=embed)
@@ -294,10 +298,10 @@ class HistoryCog(commands.Cog):
 
             red_team = [f"<@{id}>" for id in match.players_red]
             blue_team = [f"<@{id}>" for id in match.players_blue]
-            
+
             red_team[0] = f"{red_team[0]} 👑"
             blue_team[0] = f"{blue_team[0]} 👑"
-            
+
             duration = match.duration
             if duration:
                 hours, remainder = divmod(duration.seconds, 3600)
@@ -305,34 +309,36 @@ class HistoryCog(commands.Cog):
                 duration_str = f"{hours}h {minutes}m {seconds}s"
             else:
                 duration_str = "N/A"
-            
+
             rank_group_display = {
                 "iron-plat": "Iron - Platinum",
                 "dia-asc": "Diamond - Ascendant",
-                "imm-radiant": "Immortal - Radiant"
+                "imm-radiant": "Immortal - Radiant",
             }
 
             red_side = "⚔️ Attack" if match.defense_start == "blue" else "🛡️ Defense"
             blue_side = "⚔️ Attack" if match.defense_start == "red" else "🛡️ Defense"
-            
+
             embed = discord.Embed(
                 title=f"Match {match.match_id}",
                 description=f"**Rank Group: {rank_group_display[match.rank_group]}**",
                 color=discord.Color.dark_theme(),
-                timestamp=match.created_at
+                timestamp=match.created_at,
             )
-            
+
             embed.add_field(
                 name=f"🔴 Red Team {red_side}",
-                value=f"• Captain: <@{match.players_red[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_red[1:]]),
-                inline=True
+                value=f"• Captain: <@{match.players_red[0]}>\n"
+                + "\n".join([f"• <@{id}>" for id in match.players_red[1:]]),
+                inline=True,
             )
             embed.add_field(
                 name=f"🔵 Blue Team {blue_side}",
-                value=f"• Captain: <@{match.players_blue[0]}>\n" + "\n".join([f"• <@{id}>" for id in match.players_blue[1:]]),
-                inline=True
+                value=f"• Captain: <@{match.players_blue[0]}>\n"
+                + "\n".join([f"• <@{id}>" for id in match.players_blue[1:]]),
+                inline=True,
             )
-            
+
             embed.add_field(
                 name="Match Details",
                 value=(
@@ -342,7 +348,7 @@ class HistoryCog(commands.Cog):
                     f"Duration: {duration_str}\n"
                     f"Date: {match.created_at.strftime('%Y-%m-%d %H:%M')}"
                 ),
-                inline=False
+                inline=False,
             )
 
             await channel.send(embed=embed)
@@ -361,5 +367,6 @@ class HistoryCog(commands.Cog):
                     await message.delete()
                     break
 
+
 async def setup(bot):
-    await bot.add_cog(HistoryCog(bot)) 
+    await bot.add_cog(HistoryCog(bot))

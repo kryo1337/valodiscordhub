@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from pathlib import Path
 from dotenv import load_dotenv
 import os
 from typing import Optional
@@ -9,7 +10,7 @@ from utils.db import get_player, create_player, update_player_rank
 from utils.rate_limit import rate_limiter
 from utils.permissions import check_player_status
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID"))
 
 RANK_GROUPS = {
@@ -19,16 +20,33 @@ RANK_GROUPS = {
 }
 
 VALID_RANKS = [
-    "Iron 1", "Iron 2", "Iron 3",
-    "Bronze 1", "Bronze 2", "Bronze 3",
-    "Silver 1", "Silver 2", "Silver 3",
-    "Gold 1", "Gold 2", "Gold 3",
-    "Platinum 1", "Platinum 2", "Platinum 3",
-    "Diamond 1", "Diamond 2", "Diamond 3",
-    "Ascendant 1", "Ascendant 2", "Ascendant 3",
-    "Immortal 1", "Immortal 2", "Immortal 3",
-    "Radiant"
+    "Iron 1",
+    "Iron 2",
+    "Iron 3",
+    "Bronze 1",
+    "Bronze 2",
+    "Bronze 3",
+    "Silver 1",
+    "Silver 2",
+    "Silver 3",
+    "Gold 1",
+    "Gold 2",
+    "Gold 3",
+    "Platinum 1",
+    "Platinum 2",
+    "Platinum 3",
+    "Diamond 1",
+    "Diamond 2",
+    "Diamond 3",
+    "Ascendant 1",
+    "Ascendant 2",
+    "Ascendant 3",
+    "Immortal 1",
+    "Immortal 2",
+    "Immortal 3",
+    "Radiant",
 ]
+
 
 class RankModal(discord.ui.Modal, title="Enter your Riot ID"):
     riot_id = discord.ui.TextInput(
@@ -36,7 +54,7 @@ class RankModal(discord.ui.Modal, title="Enter your Riot ID"):
         placeholder="Enter your Riot ID (e.g. Player#1337)",
         required=True,
         min_length=3,
-        max_length=20
+        max_length=20,
     )
 
     def __init__(self):
@@ -44,12 +62,12 @@ class RankModal(discord.ui.Modal, title="Enter your Riot ID"):
 
     async def on_submit(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
-        
+
         is_limited, remaining = rate_limiter.is_rate_limited(user_id, "rank")
         if is_limited:
             await interaction.response.send_message(
                 f"Please wait {remaining} seconds before submitting another rank request!",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
@@ -62,45 +80,51 @@ class RankModal(discord.ui.Modal, title="Enter your Riot ID"):
 
         try:
             riot_id = self.riot_id.value.strip()
-            
+
             guild = interaction.guild
             category = discord.utils.get(guild.categories, name="Staff")
             if category:
-                admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks")
+                admin_ranks_channel = discord.utils.get(
+                    category.channels, name="admin-ranks"
+                )
                 if admin_ranks_channel:
                     async for message in admin_ranks_channel.history(limit=50):
-                        if (message.author == interaction.client.user and 
-                            message.embeds and 
-                            message.embeds[0].footer and 
-                            message.embeds[0].footer.text == f"Ticket ID: {user_id}"):
+                        if (
+                            message.author == interaction.client.user
+                            and message.embeds
+                            and message.embeds[0].footer
+                            and message.embeds[0].footer.text == f"Ticket ID: {user_id}"
+                        ):
                             await interaction.followup.send(
                                 f"❌ You already have a pending rank ticket in {admin_ranks_channel.mention}\n"
                                 f"Please wait for an admin to review your request.",
-                                ephemeral=True
+                                ephemeral=True,
                             )
                             return
 
             rank_cog = interaction.client.get_cog("Rank")
             if rank_cog:
-                ticket_channel = await rank_cog.create_rank_ticket(interaction.guild, interaction.user, riot_id)
+                ticket_channel = await rank_cog.create_rank_ticket(
+                    interaction.guild, interaction.user, riot_id
+                )
             else:
                 ticket_channel = None
-            
+
             if ticket_channel:
                 rate_limiter.update_cooldown(user_id, "rank")
-                
+
                 await interaction.followup.send(
-                    f"✅ Rank verification request submitted!",
-                    ephemeral=True
+                    f"✅ Rank verification request submitted!", ephemeral=True
                 )
             else:
                 await interaction.followup.send(
                     "❌ Failed to create rank ticket. Please try again later.",
-                    ephemeral=True
+                    ephemeral=True,
                 )
 
         except Exception as e:
             await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 class RankTicketView(discord.ui.View):
     def __init__(self, user: discord.Member, riot_id: str):
@@ -108,23 +132,44 @@ class RankTicketView(discord.ui.View):
         self.user = user
         self.riot_id = riot_id
 
-    @discord.ui.button(label="Select Rank", style=discord.ButtonStyle.success, emoji="✅", custom_id="select_rank")
-    async def select_rank(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="Select Rank",
+        style=discord.ButtonStyle.success,
+        emoji="✅",
+        custom_id="select_rank",
+    )
+    async def select_rank(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("You don't have permission to approve rank requests!", ephemeral=True)
+            await interaction.response.send_message(
+                "You don't have permission to approve rank requests!", ephemeral=True
+            )
             return
 
         view = RankSelectionView(self.user, self.riot_id, interaction.message)
-        await interaction.response.send_message("Select a rank:", view=view, ephemeral=True)
+        await interaction.response.send_message(
+            "Select a rank:", view=view, ephemeral=True
+        )
 
-    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, emoji="❌", custom_id="reject_request")
-    async def reject_request(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="Reject Request",
+        style=discord.ButtonStyle.danger,
+        emoji="❌",
+        custom_id="reject_request",
+    )
+    async def reject_request(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("You don't have permission to reject rank requests!", ephemeral=True)
+            await interaction.response.send_message(
+                "You don't have permission to reject rank requests!", ephemeral=True
+            )
             return
 
         modal = RejectionModal(self.user, self.riot_id, interaction.message)
         await interaction.response.send_modal(modal)
+
 
 class RankSelectionModal(discord.ui.Modal, title="Select Rank"):
     rank = discord.ui.TextInput(
@@ -132,7 +177,7 @@ class RankSelectionModal(discord.ui.Modal, title="Select Rank"):
         placeholder="Enter rank",
         required=True,
         min_length=2,
-        max_length=20
+        max_length=20,
     )
 
     def __init__(self, user: discord.Member, riot_id: str, message: discord.Message):
@@ -148,7 +193,7 @@ class RankSelectionModal(discord.ui.Modal, title="Select Rank"):
         if rank not in VALID_RANKS:
             await interaction.followup.send(
                 f"❌ Invalid rank: {rank}\nValid ranks: {', '.join(VALID_RANKS)}",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
@@ -156,9 +201,7 @@ class RankSelectionModal(discord.ui.Modal, title="Select Rank"):
             player = await get_player(str(self.user.id))
             if not player:
                 player = await create_player(
-                    discord_id=str(self.user.id),
-                    riot_id=self.riot_id,
-                    rank=rank
+                    discord_id=str(self.user.id), riot_id=self.riot_id, rank=rank
                 )
             else:
                 player = await update_player_rank(str(self.user.id), rank)
@@ -171,21 +214,25 @@ class RankSelectionModal(discord.ui.Modal, title="Select Rank"):
             success_embed = discord.Embed(
                 title="✅ Rank Approved",
                 description=f"**User:** {self.user.mention}\n**Riot ID:** {self.riot_id}\n**Rank:** {rank}",
-                color=discord.Color.green()
+                color=discord.Color.green(),
             )
             if role_assigned:
-                success_embed.add_field(name="Role Assigned", value=f"✅ {role_name}", inline=False)
+                success_embed.add_field(
+                    name="Role Assigned", value=f"✅ {role_name}", inline=False
+                )
 
             try:
                 user_embed = discord.Embed(
                     title="🎮 Rank Approved!",
                     description=f"Your rank has been set to **{rank}**",
-                    color=discord.Color.green()
+                    color=discord.Color.green(),
                 )
                 user_embed.add_field(name="Riot ID", value=self.riot_id, inline=False)
                 if role_assigned:
-                    user_embed.add_field(name="Role", value=f"✅ {role_name}", inline=False)
-                
+                    user_embed.add_field(
+                        name="Role", value=f"✅ {role_name}", inline=False
+                    )
+
                 await self.user.send(embed=user_embed)
             except:
                 pass
@@ -198,15 +245,27 @@ class RankSelectionModal(discord.ui.Modal, title="Select Rank"):
                         f"**Riot ID:** {self.riot_id}\n"
                         f"**Rank:** {rank}"
                     ),
-                    color=discord.Color.green()
+                    color=discord.Color.green(),
                 )
                 if role_assigned:
-                    public_embed.add_field(name="Role Assigned", value=f"✅ {role_name}", inline=False)
-                public_embed.add_field(name="Assigned By", value=interaction.user.mention, inline=False)
+                    public_embed.add_field(
+                        name="Role Assigned", value=f"✅ {role_name}", inline=False
+                    )
+                public_embed.add_field(
+                    name="Assigned By", value=interaction.user.mention, inline=False
+                )
 
-                category = interaction.guild and discord.utils.get(interaction.guild.categories, name="Staff")
-                admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks") if category else None
-                target_channel = admin_ranks_channel or (self.message.channel if hasattr(self, "message") else None)
+                category = interaction.guild and discord.utils.get(
+                    interaction.guild.categories, name="Staff"
+                )
+                admin_ranks_channel = (
+                    discord.utils.get(category.channels, name="admin-ranks")
+                    if category
+                    else None
+                )
+                target_channel = admin_ranks_channel or (
+                    self.message.channel if hasattr(self, "message") else None
+                )
                 if target_channel:
                     await target_channel.send(embed=public_embed)
             except Exception:
@@ -248,6 +307,7 @@ class RankSelectionModal(discord.ui.Modal, title="Select Rank"):
             return True
         except discord.Forbidden:
             return False
+
 
 class RankSelectionView(discord.ui.View):
     def __init__(self, user: discord.Member, riot_id: str, message: discord.Message):
@@ -284,24 +344,26 @@ class RankSelectionView(discord.ui.View):
             discord.SelectOption(label="Immortal 2", value="Immortal 2"),
             discord.SelectOption(label="Immortal 3", value="Immortal 3"),
             discord.SelectOption(label="Radiant", value="Radiant"),
-        ]
+        ],
     )
-    async def select_rank(self, interaction: discord.Interaction, select: discord.ui.Select):
+    async def select_rank(
+        self, interaction: discord.Interaction, select: discord.ui.Select
+    ):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("You don't have permission to approve rank requests!", ephemeral=True)
+            await interaction.response.send_message(
+                "You don't have permission to approve rank requests!", ephemeral=True
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
 
         rank = select.values[0]
-        
+
         try:
             player = await get_player(str(self.user.id))
             if not player:
                 player = await create_player(
-                    discord_id=str(self.user.id),
-                    riot_id=self.riot_id,
-                    rank=rank
+                    discord_id=str(self.user.id), riot_id=self.riot_id, rank=rank
                 )
             else:
                 player = await update_player_rank(str(self.user.id), rank)
@@ -314,21 +376,25 @@ class RankSelectionView(discord.ui.View):
             success_embed = discord.Embed(
                 title="✅ Rank Approved",
                 description=f"**User:** {self.user.mention}\n**Riot ID:** {self.riot_id}\n**Rank:** {rank}",
-                color=discord.Color.green()
+                color=discord.Color.green(),
             )
             if role_assigned:
-                success_embed.add_field(name="Role Assigned", value=f"✅ {role_name}", inline=False)
+                success_embed.add_field(
+                    name="Role Assigned", value=f"✅ {role_name}", inline=False
+                )
 
             try:
                 user_embed = discord.Embed(
                     title="🎮 Rank Approved!",
                     description=f"Your rank has been set to **{rank}**",
-                    color=discord.Color.green()
+                    color=discord.Color.green(),
                 )
                 user_embed.add_field(name="Riot ID", value=self.riot_id, inline=False)
                 if role_assigned:
-                    user_embed.add_field(name="Role", value=f"✅ {role_name}", inline=False)
-                
+                    user_embed.add_field(
+                        name="Role", value=f"✅ {role_name}", inline=False
+                    )
+
                 await self.user.send(embed=user_embed)
             except:
                 pass
@@ -341,15 +407,27 @@ class RankSelectionView(discord.ui.View):
                         f"**Riot ID:** {self.riot_id}\n"
                         f"**Rank:** {rank}"
                     ),
-                    color=discord.Color.green()
+                    color=discord.Color.green(),
                 )
                 if role_assigned:
-                    public_embed.add_field(name="Role Assigned", value=f"✅ {role_name}", inline=False)
-                public_embed.add_field(name="Assigned By", value=interaction.user.mention, inline=False)
+                    public_embed.add_field(
+                        name="Role Assigned", value=f"✅ {role_name}", inline=False
+                    )
+                public_embed.add_field(
+                    name="Assigned By", value=interaction.user.mention, inline=False
+                )
 
-                category = interaction.guild and discord.utils.get(interaction.guild.categories, name="Staff")
-                admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks") if category else None
-                target_channel = admin_ranks_channel or (self.message.channel if hasattr(self, "message") else None)
+                category = interaction.guild and discord.utils.get(
+                    interaction.guild.categories, name="Staff"
+                )
+                admin_ranks_channel = (
+                    discord.utils.get(category.channels, name="admin-ranks")
+                    if category
+                    else None
+                )
+                target_channel = admin_ranks_channel or (
+                    self.message.channel if hasattr(self, "message") else None
+                )
                 if target_channel:
                     await target_channel.send(embed=public_embed)
             except Exception:
@@ -392,6 +470,7 @@ class RankSelectionView(discord.ui.View):
         except discord.Forbidden:
             return False
 
+
 class RejectionModal(discord.ui.Modal, title="Reject Rank Request"):
     reason = discord.ui.TextInput(
         label="Reason for Rejection",
@@ -399,7 +478,7 @@ class RejectionModal(discord.ui.Modal, title="Reject Rank Request"):
         required=True,
         min_length=1,
         max_length=500,
-        style=discord.TextStyle.paragraph
+        style=discord.TextStyle.paragraph,
     )
 
     def __init__(self, user: discord.Member, riot_id: str, message: discord.Message):
@@ -416,11 +495,13 @@ class RejectionModal(discord.ui.Modal, title="Reject Rank Request"):
                 user_embed = discord.Embed(
                     title="❌ Rank Request Rejected",
                     description="Your rank request has been rejected by an admin.",
-                    color=discord.Color.red()
+                    color=discord.Color.red(),
                 )
                 user_embed.add_field(name="Riot ID", value=self.riot_id, inline=False)
-                user_embed.add_field(name="Reason", value=self.reason.value, inline=False)
-                
+                user_embed.add_field(
+                    name="Reason", value=self.reason.value, inline=False
+                )
+
                 await self.user.send(embed=user_embed)
             except:
                 pass
@@ -433,12 +514,22 @@ class RejectionModal(discord.ui.Modal, title="Reject Rank Request"):
                         f"**Riot ID:** {self.riot_id}\n"
                         f"**Reason:** {self.reason.value}"
                     ),
-                    color=discord.Color.red()
+                    color=discord.Color.red(),
                 )
-                public_embed.add_field(name="Rejected By", value=interaction.user.mention, inline=False)
-                category = interaction.guild and discord.utils.get(interaction.guild.categories, name="Staff")
-                admin_ranks_channel = discord.utils.get(category.channels, name="admin-ranks") if category else None
-                target_channel = admin_ranks_channel or (self.message.channel if hasattr(self, "message") else None)
+                public_embed.add_field(
+                    name="Rejected By", value=interaction.user.mention, inline=False
+                )
+                category = interaction.guild and discord.utils.get(
+                    interaction.guild.categories, name="Staff"
+                )
+                admin_ranks_channel = (
+                    discord.utils.get(category.channels, name="admin-ranks")
+                    if category
+                    else None
+                )
+                target_channel = admin_ranks_channel or (
+                    self.message.channel if hasattr(self, "message") else None
+                )
                 if target_channel:
                     await target_channel.send(embed=public_embed)
             except Exception:
@@ -449,22 +540,25 @@ class RejectionModal(discord.ui.Modal, title="Reject Rank Request"):
         except Exception as e:
             await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 
+
 class RankButton(discord.ui.Button):
     def __init__(self):
         super().__init__(
             label="Request Rank Verification",
             style=discord.ButtonStyle.primary,
-            emoji="🎮"
+            emoji="🎮",
         )
 
     async def callback(self, interaction: discord.Interaction):
         modal = RankModal()
         await interaction.response.send_modal(modal)
 
+
 class RankView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(RankButton())
+
 
 class Rank(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -474,7 +568,9 @@ class Rank(commands.Cog):
     async def on_ready(self):
         await self.setup_existing_rank_channel()
 
-    async def create_rank_ticket(self, guild: discord.Guild, user: discord.Member, riot_id: str) -> Optional[discord.TextChannel]:
+    async def create_rank_ticket(
+        self, guild: discord.Guild, user: discord.Member, riot_id: str
+    ) -> Optional[discord.TextChannel]:
         try:
             category = discord.utils.get(guild.categories, name="Staff")
             if not category:
@@ -483,35 +579,39 @@ class Rank(commands.Cog):
             channel = discord.utils.get(category.channels, name="admin-ranks")
             if not channel:
                 overwrites = {
-                    guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                    guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                    guild.default_role: discord.PermissionOverwrite(
+                        read_messages=False
+                    ),
+                    guild.me: discord.PermissionOverwrite(
+                        read_messages=True, send_messages=True
+                    ),
                 }
-                
+
                 channel = await guild.create_text_channel(
                     name="admin-ranks",
                     category=category,
                     topic="Rank verification requests",
-                    overwrites=overwrites
+                    overwrites=overwrites,
                 )
 
             embed = discord.Embed(
                 title="🎮 Rank Verification Request",
                 description=f"**User:** {user.mention}\n**Riot ID:** {riot_id}",
-                color=discord.Color.blue()
+                color=discord.Color.blue(),
             )
-            
+
             embed.add_field(
                 name="🔗 Tracker.gg Profile",
                 value=f"[Click here to view profile](https://tracker.gg/valorant/profile/riot/{riot_id.replace('#', '%23')}/overview)",
-                inline=False
+                inline=False,
             )
-            
+
             embed.add_field(
                 name="📝 Instructions",
                 value="1. Click the tracker link above\n"
-                      "2. Verify the user's rank\n"
-                      "3. Use the buttons below to approve or reject",
-                inline=False
+                "2. Verify the user's rank\n"
+                "3. Use the buttons below to approve or reject",
+                inline=False,
             )
 
             embed.set_footer(text=f"Ticket ID: {user.id}")
@@ -538,21 +638,17 @@ class Rank(commands.Cog):
         if channel:
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=False
+                    view_channel=True, send_messages=False
                 ),
                 guild.me: discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    manage_channels=True
+                    view_channel=True, send_messages=True, manage_channels=True
                 ),
             }
             for role_name in ["iron-plat", "dia-asc", "imm-radiant"]:
                 role = discord.utils.get(guild.roles, name=role_name)
                 if role:
                     overwrites[role] = discord.PermissionOverwrite(
-                        view_channel=True,
-                        send_messages=False
+                        view_channel=True, send_messages=False
                     )
             await channel.edit(overwrites=overwrites)
             async for message in channel.history(limit=None):
@@ -564,32 +660,32 @@ class Rank(commands.Cog):
             embed = discord.Embed(
                 title="Valorant Rank Verification",
                 description="Request rank verification by clicking the button below!",
-                color=discord.Color.blue()
+                color=discord.Color.blue(),
             )
 
             embed.add_field(
                 name="📝 How it works",
                 value="1. Click the button below\n"
-                      "2. Enter your Riot ID (e.g. Player#1337)\n"
-                      "3. A ticket will be created for admin review\n"
-                      "4. Admin will verify your rank and assign you the appropriate role",
-                inline=False
+                "2. Enter your Riot ID (e.g. Player#1337)\n"
+                "3. A ticket will be created for admin review\n"
+                "4. Admin will verify your rank and assign you the appropriate role",
+                inline=False,
             )
 
             embed.add_field(
                 name="🎯 Rank Groups",
                 value="• Iron - Platinum: `iron-plat`\n"
-                      "• Diamond - Ascendant: `dia-asc`\n"
-                      "• Immortal - Radiant: `imm-radiant`",
-                inline=False
+                "• Diamond - Ascendant: `dia-asc`\n"
+                "• Immortal - Radiant: `imm-radiant`",
+                inline=False,
             )
 
             embed.add_field(
                 name="⚠️ Important",
                 value="• Make sure your Riot ID is correct\n"
-                      "• Your profile must be public on tracker.gg\n"
-                      "• You'll receive a DM when your rank is approved",
-                inline=False
+                "• Your profile must be public on tracker.gg\n"
+                "• You'll receive a DM when your rank is approved",
+                inline=False,
             )
 
             embed.set_footer(text="Need help? Contact an admin!")
@@ -614,13 +710,10 @@ class Rank(commands.Cog):
 
             overwrites = {
                 interaction.guild.default_role: discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=False
+                    view_channel=True, send_messages=False
                 ),
                 interaction.guild.me: discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    manage_channels=True
+                    view_channel=True, send_messages=True, manage_channels=True
                 ),
             }
 
@@ -628,8 +721,7 @@ class Rank(commands.Cog):
                 role = discord.utils.get(interaction.guild.roles, name=role_name)
                 if role:
                     overwrites[role] = discord.PermissionOverwrite(
-                        view_channel=True,
-                        send_messages=False
+                        view_channel=True, send_messages=False
                     )
 
             channel = await interaction.guild.create_text_channel(
@@ -637,38 +729,38 @@ class Rank(commands.Cog):
                 category=category,
                 topic="Request rank verification here!",
                 overwrites=overwrites,
-                reason="Auto-created for rank verification"
+                reason="Auto-created for rank verification",
             )
 
             embed = discord.Embed(
                 title="Valorant Rank Verification",
                 description="Request rank verification by clicking the button below!",
-                color=discord.Color.blue()
+                color=discord.Color.blue(),
             )
 
             embed.add_field(
                 name="📝 How it works",
                 value="1. Click the button below\n"
-                      "2. Enter your Riot ID (e.g. Player#1337)\n"
-                      "3. A ticket will be created for admin review\n"
-                      "4. Admin will verify your rank and assign you the appropriate role",
-                inline=False
+                "2. Enter your Riot ID (e.g. Player#1337)\n"
+                "3. A ticket will be created for admin review\n"
+                "4. Admin will verify your rank and assign you the appropriate role",
+                inline=False,
             )
 
             embed.add_field(
                 name="🎯 Rank Groups",
                 value="• Iron - Platinum: `iron-plat`\n"
-                      "• Diamond - Ascendant: `dia-asc`\n"
-                      "• Immortal - Radiant: `imm-radiant`",
-                inline=False
+                "• Diamond - Ascendant: `dia-asc`\n"
+                "• Immortal - Radiant: `imm-radiant`",
+                inline=False,
             )
 
             embed.add_field(
                 name="⚠️ Important",
                 value="• Make sure your Riot ID is correct\n"
-                      "• Your profile must be public on tracker.gg\n"
-                      "• You'll receive a DM when your rank is approved",
-                inline=False
+                "• Your profile must be public on tracker.gg\n"
+                "• You'll receive a DM when your rank is approved",
+                inline=False,
             )
 
             embed.set_footer(text="Need help? Contact an admin!")
@@ -678,14 +770,14 @@ class Rank(commands.Cog):
 
             await interaction.followup.send(
                 f"✅ Rank verification channel setup complete! Check {channel.mention}",
-                ephemeral=True
+                ephemeral=True,
             )
 
         except Exception as e:
             await interaction.followup.send(
-                f"❌ Failed to setup rank channel: {str(e)}",
-                ephemeral=True
+                f"❌ Failed to setup rank channel: {str(e)}", ephemeral=True
             )
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Rank(bot))
