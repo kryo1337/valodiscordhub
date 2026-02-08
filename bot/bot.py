@@ -80,7 +80,7 @@ async def before_command(ctx):
     if is_limited:
         raise commands.CommandOnCooldown(ctx.command, remaining)
 
-    allowed, reason = check_command_permissions(ctx, ctx.command.name)
+    allowed, reason = await check_command_permissions(ctx, ctx.command.name)
     if not allowed:
         raise commands.MissingPermissions([reason])
 

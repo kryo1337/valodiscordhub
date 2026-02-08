@@ -1,6 +1,6 @@
 import httpx
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -10,15 +10,17 @@ load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 API_BASE_URL = os.getenv("API_BASE_URL")
 BOT_API_TOKEN = os.getenv("BOT_API_TOKEN")
 
+APIResponse = Dict[str, Any]
+RequestParams = Optional[Dict[str, Any]]
+RequestBody = Dict[str, Any]
+
 
 class APIClient:
-    def __init__(self):
-        self.base_url = API_BASE_URL
-        self.headers = {"Authorization": f"Bot {BOT_API_TOKEN}"}
+    def __init__(self) -> None:
+        self.base_url: str = API_BASE_URL
+        self.headers: Dict[str, str] = {"Authorization": f"Bot {BOT_API_TOKEN}"}
 
-    async def get(
-        self, endpoint: str, params: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    async def get(self, endpoint: str, params: RequestParams = None) -> APIResponse:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
@@ -39,7 +41,7 @@ class APIClient:
             except httpx.RequestError as e:
                 raise ConnectionError(f"Failed to connect to API: {e}")
 
-    async def post(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def post(self, endpoint: str, data: RequestBody) -> APIResponse:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(
@@ -60,7 +62,7 @@ class APIClient:
             except httpx.RequestError as e:
                 raise ConnectionError(f"Failed to connect to API: {e}")
 
-    async def patch(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def patch(self, endpoint: str, data: RequestBody) -> APIResponse:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.patch(
@@ -81,7 +83,7 @@ class APIClient:
             except httpx.RequestError as e:
                 raise ConnectionError(f"Failed to connect to API: {e}")
 
-    async def put(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def put(self, endpoint: str, data: RequestBody) -> APIResponse:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.put(
@@ -102,11 +104,13 @@ class APIClient:
             except httpx.RequestError as e:
                 raise ConnectionError(f"Failed to connect to API: {e}")
 
-    async def delete(self, endpoint: str) -> Dict[str, Any]:
+    async def delete(self, endpoint: str) -> APIResponse:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.delete(
-                    f"{self.base_url}{endpoint}", headers=self.headers, timeout=10.0
+                    f"{self.base_url}{endpoint}",
+                    headers=self.headers,
+                    timeout=10.0,
                 )
                 response.raise_for_status()
                 return response.json()
@@ -121,4 +125,4 @@ class APIClient:
                 raise ConnectionError(f"Failed to connect to API: {e}")
 
 
-api_client = APIClient()
+api_client: APIClient = APIClient()

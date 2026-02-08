@@ -21,6 +21,14 @@ from utils.db import (
     is_player_in_match,
 )
 from utils.rate_limit import rate_limiter
+from utils.constants import (
+    RankGroup,
+    QueueChannel,
+    QueueColors,
+    Category,
+    QueueLimit,
+    ProgressBar,
+)
 from .match import create_match
 
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
@@ -175,11 +183,15 @@ class QueueCog(commands.Cog):
         if not guild:
             return
 
-        category = discord.utils.get(guild.categories, name="Hub")
+        category = discord.utils.get(guild.categories, name=Category.HUB.value)
         if not category:
             return
 
-        rank_groups = ["iron-plat", "dia-asc", "imm-radiant"]
+        rank_groups = [
+            RankGroup.IRON_PLAT.value,
+            RankGroup.DIA_ASC.value,
+            RankGroup.IMM_RADIANT.value,
+        ]
         for rank_group in rank_groups:
             channel = discord.utils.get(category.channels, name=f"queue-{rank_group}")
             if channel:

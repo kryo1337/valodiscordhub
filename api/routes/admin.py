@@ -1,13 +1,37 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
+from pydantic import BaseModel
 from db import get_db
-from auth import require_bot_token
+from auth import require_bot_token, get_request_origin
 from models.admin_log import AdminLog
 from models.updates import AdminLogCreate
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime, timezone
+from rate_limit import check_rate_limit
+
+
+class BatchCheckRequest(BaseModel):
+    discord_ids: List[str]
+
+
+class BatchCheckResponse(BaseModel):
+    bans: Dict[str, bool]
+    timeouts: Dict[str, bool]
+
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+async def require_admin_rate_limit(request: Request):
+    """Rate limit for admin endpoints: 30 requests per minute."""
+    origin = get_request_origin(request) or "unknown"
+    allowed, count = await check_rate_limit(key=f"admin:{origin}", limit=30, period=60)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many admin requests. Please try again later.",
+            headers={"X-RateLimit-Remaining": str(max(0, 30 - count))},
+        )
 
 
 @router.get("/logs", response_model=List[AdminLog])
@@ -215,7 +239,8 @@ async def get_timeout_remaining(
 
 
 @router.delete(
-    "/logs/{action}/{target_discord_id}", dependencies=[Depends(require_bot_token)]
+    "/logs/{action}/{target_discord_id}",
+    dependencies=[Depends(require_bot_token), Depends(require_admin_rate_limit)],
 )
 async def remove_admin_log(
     action: str, target_discord_id: str, db: AsyncIOMotorDatabase = Depends(get_db)
@@ -232,7 +257,11 @@ async def remove_admin_log(
     return {"message": "Admin log removed successfully"}
 
 
-@router.post("/ban", response_model=AdminLog, dependencies=[Depends(require_bot_token)])
+@router.post(
+    "/ban",
+    response_model=AdminLog,
+    dependencies=[Depends(require_bot_token), Depends(require_admin_rate_limit)],
+)
 async def ban_player(
     log: AdminLogCreate = Body(...), db: AsyncIOMotorDatabase = Depends(get_db)
 ):
@@ -264,7 +293,9 @@ async def ban_player(
 
 
 @router.post(
-    "/timeout", response_model=AdminLog, dependencies=[Depends(require_bot_token)]
+    "/timeout",
+    response_model=AdminLog,
+    dependencies=[Depends(require_bot_token), Depends(require_admin_rate_limit)],
 )
 async def timeout_player(
     log: AdminLogCreate = Body(...), db: AsyncIOMotorDatabase = Depends(get_db)
@@ -298,7 +329,9 @@ async def timeout_player(
 
 
 @router.post(
-    "/unban", response_model=AdminLog, dependencies=[Depends(require_bot_token)]
+    "/unban",
+    response_model=AdminLog,
+    dependencies=[Depends(require_bot_token), Depends(require_admin_rate_limit)],
 )
 async def unban_player(
     log: AdminLogCreate = Body(...), db: AsyncIOMotorDatabase = Depends(get_db)
@@ -329,3 +362,60 @@ async def unban_player(
     log_dict["action"] = "unban"
     await db.admin_logs.insert_one(log_dict)
     return AdminLog(**log_dict)
+
+
+@router.post(
+    "/check-batch",
+    response_model=BatchCheckResponse,
+    dependencies=[Depends(require_bot_token)],
+)
+async def batch_check_players(
+    request: BatchCheckRequest, db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """
+    Batch check bans and timeouts for multiple players. Bot only.
+
+    Returns dictionaries mapping discord_id to boolean status.
+    """
+    bans: Dict[str, bool] = {}
+    timeouts: Dict[str, bool] = {}
+
+    # Fetch all bans in one query
+    if request.discord_ids:
+        ban_docs = await db.admin_logs.find(
+            {"action": "ban", "target_discord_id": {"$in": request.discord_ids}}
+        ).to_list(length=len(request.discord_ids))
+        banned_ids = {doc["target_discord_id"] for doc in ban_docs}
+        bans = {
+            discord_id: discord_id in banned_ids for discord_id in request.discord_ids
+        }
+
+        # Fetch all timeouts in one query
+        timeout_docs = (
+            await db.admin_logs.find(
+                {"action": "timeout", "target_discord_id": {"$in": request.discord_ids}}
+            )
+            .sort("timestamp", -1)
+            .to_list(length=len(request.discord_ids) * 2)
+        )
+
+        current_time = datetime.now(timezone.utc)
+
+        for discord_id in request.discord_ids:
+            latest_timeout = None
+            for doc in timeout_docs:
+                if doc["target_discord_id"] == discord_id:
+                    latest_timeout = doc
+                    break
+
+            if latest_timeout:
+                timeout_time = latest_timeout["timestamp"]
+                if timeout_time.tzinfo is None:
+                    timeout_time = timeout_time.replace(tzinfo=timezone.utc)
+                duration = latest_timeout["duration_minutes"]
+                time_diff = (current_time - timeout_time).total_seconds() / 60.0
+                timeouts[discord_id] = time_diff < duration
+            else:
+                timeouts[discord_id] = False
+
+    return BatchCheckResponse(bans=bans, timeouts=timeouts)

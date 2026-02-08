@@ -89,18 +89,55 @@ async def join_queue(
             detail="You are currently in an active match and cannot join the queue",
         )
 
-    existing_queue = await db.queues.find_one(
+    # Atomic update to prevent race conditions
+    # Uses find_one_and_update with conditions to ensure:
+    # 1. Player is not already in queue
+    # 2. Queue has less than 10 players
+    result = await db.queues.find_one_and_update(
         {
             "rank_group": rank_group,
-            "players": {"$elemMatch": {"discord_id": entry.discord_id}},
-        }
+            "$expr": {
+                "$and": [
+                    {
+                        "$not": {
+                            "$in": [
+                                entry.discord_id,
+                                {
+                                    "$map": {
+                                        "input": "$players",
+                                        "as": "p",
+                                        "in": "$$p.discord_id",
+                                    }
+                                },
+                            ]
+                        }
+                    },
+                    {"$lt": [{"$size": "$players"}, 10]},
+                ]
+            },
+        },
+        {"$push": {"players": entry.dict()}},
+        return_document=True,
+        upsert=True,
     )
-    if existing_queue:
-        raise HTTPException(status_code=400, detail="You are already in the queue")
 
-    await db.queues.update_one(
-        {"rank_group": rank_group}, {"$push": {"players": entry.dict()}}, upsert=True
-    )
+    if not result:
+        # The update failed - check why
+        queue_doc = await db.queues.find_one({"rank_group": rank_group})
+        if queue_doc:
+            if any(
+                p["discord_id"] == entry.discord_id
+                for p in queue_doc.get("players", [])
+            ):
+                raise HTTPException(status_code=400, detail="You are already in queue")
+            if len(queue_doc.get("players", [])) >= 10:
+                raise HTTPException(
+                    status_code=400, detail="Queue is full (10/10 players)"
+                )
+        else:
+            # Shouldn't happen with upsert, but handle gracefully
+            raise HTTPException(status_code=500, detail="Failed to join queue")
+
     doc = await db.queues.find_one({"rank_group": rank_group})
     queue = Queue(**doc)
 

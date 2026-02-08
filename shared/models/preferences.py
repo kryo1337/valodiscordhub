@@ -13,4 +13,4 @@ class UserPreferences(BaseModel):
         valid_sizes = [5, 10, 25, 50]
         if v not in valid_sizes:
             raise ValueError(f"page_size must be one of {valid_sizes}")
-        return v 
+        return v

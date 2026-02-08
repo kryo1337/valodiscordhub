@@ -108,9 +108,8 @@ class AdminCog(commands.Cog):
                 entry = current_entries[player_id]
                 entry.points += 10
                 entry.matches_played += 1
-                entry.winrate = (
-                    entry.winrate * (entry.matches_played - 1) + 100
-                ) / entry.matches_played
+                entry.wins += 1
+                entry.winrate = (entry.wins / entry.matches_played) * 100
                 entry.streak = max(0, entry.streak) + 1
             else:
                 entry = LeaderboardEntry(
@@ -118,6 +117,7 @@ class AdminCog(commands.Cog):
                     rank=player_ranks.get(player_id, "Unranked"),
                     points=1010,
                     matches_played=1,
+                    wins=1,
                     winrate=100.0,
                     streak=1,
                 )
@@ -129,9 +129,7 @@ class AdminCog(commands.Cog):
                 entry = current_entries[player_id]
                 entry.points = max(0, entry.points - 10)
                 entry.matches_played += 1
-                entry.winrate = (
-                    entry.winrate * (entry.matches_played - 1)
-                ) / entry.matches_played
+                entry.winrate = (entry.wins / entry.matches_played) * 100
                 entry.streak = min(0, entry.streak) - 1
             else:
                 entry = LeaderboardEntry(
@@ -139,6 +137,7 @@ class AdminCog(commands.Cog):
                     rank=player_ranks.get(player_id, "Unranked"),
                     points=990,
                     matches_played=1,
+                    wins=0,
                     winrate=0.0,
                     streak=-1,
                 )
@@ -277,10 +276,9 @@ class AdminCog(commands.Cog):
                 entry = current_entries[player_id]
                 entry.points -= 10
                 entry.matches_played -= 1
+                entry.wins -= 1
                 if entry.matches_played > 0:
-                    entry.winrate = (
-                        entry.winrate * (entry.matches_played + 1) - 100
-                    ) / entry.matches_played
+                    entry.winrate = (entry.wins / entry.matches_played) * 100
                 else:
                     entry.winrate = 0.0
                 entry.streak = max(0, entry.streak - 1)
@@ -295,9 +293,7 @@ class AdminCog(commands.Cog):
                 entry.points += 10
                 entry.matches_played -= 1
                 if entry.matches_played > 0:
-                    entry.winrate = (
-                        entry.winrate * (entry.matches_played + 1)
-                    ) / entry.matches_played
+                    entry.winrate = (entry.wins / entry.matches_played) * 100
                 else:
                     entry.winrate = 0.0
                 entry.streak = min(0, entry.streak + 1)

@@ -9,6 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from .api_client import api_client
 import time
+import asyncio
 
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
@@ -18,7 +19,7 @@ async def get_player(discord_id: str) -> Optional[Player]:
     try:
         data = await api_client.get(f"/players/{discord_id}")
         return Player(**data)
-    except Exception:
+    except (ValueError, ConnectionError, KeyError):
         return None
 
 
@@ -32,7 +33,7 @@ async def update_player_rank(discord_id: str, rank: str) -> Optional[Player]:
     try:
         data = await api_client.patch(f"/players/{discord_id}", {"rank": rank})
         return Player(**data)
-    except Exception:
+    except (ValueError, ConnectionError, KeyError):
         return None
 
 
@@ -43,7 +44,7 @@ async def get_player_stats(
         params = {"rank_group": rank_group} if rank_group else None
         data = await api_client.get(f"/stats/{discord_id}", params)
         return data
-    except Exception:
+    except (ValueError, ConnectionError, KeyError):
         return None
 
 
@@ -51,31 +52,43 @@ async def get_queue(rank_group: str) -> Queue:
     try:
         data = await api_client.get(f"/queue/{rank_group}")
         queue = Queue(**data)
+
+        if not queue.players:
+            return queue
+
+        player_ids = [p.discord_id for p in queue.players]
+        bans, timeouts = await batch_check_players(player_ids)
+
         filtered_players = []
         seen_ids = set()
         for p in queue.players:
             if p.discord_id in seen_ids:
                 continue
-            if await is_player_banned(p.discord_id):
+            if bans.get(p.discord_id, False):
                 continue
-            if await is_player_timeout(p.discord_id):
+            if timeouts.get(p.discord_id, False):
                 continue
             seen_ids.add(p.discord_id)
             filtered_players.append(p)
+
         if len(filtered_players) != len(queue.players):
             queue.players = filtered_players
         return queue
-    except Exception:
+    except (ValueError, ConnectionError, KeyError, TypeError):
         return Queue(rank_group=rank_group)
 
 
 async def update_queue(rank_group: str, players: List[QueueEntry]) -> Queue:
-    players = [
-        p
-        for p in players
-        if not await is_player_banned(p.discord_id)
-        and not await is_player_timeout(p.discord_id)
-    ]
+    if players:
+        player_ids = [p.discord_id for p in players]
+        bans, timeouts = await batch_check_players(player_ids)
+
+        players = [
+            p
+            for p in players
+            if not bans.get(p.discord_id, False)
+            and not timeouts.get(p.discord_id, False)
+        ]
 
     queue = Queue(rank_group=rank_group, players=players)
     data = await api_client.put(f"/queue/{rank_group}", queue.model_dump(mode="json"))
@@ -141,7 +154,7 @@ async def get_next_match_id() -> str:
     try:
         data = await api_client.get("/matches/next-id")
         return data["match_id"]
-    except Exception:
+    except (ValueError, ConnectionError, KeyError):
         try:
             matches = await api_client.get("/matches/active")
             match_numbers = []
@@ -155,7 +168,7 @@ async def get_next_match_id() -> str:
                         continue
             next_num = max(match_numbers, default=0) + 1
             return f"match_{next_num}"
-        except Exception:
+        except (ValueError, ConnectionError, KeyError):
             return "match_1"
 
 
@@ -190,7 +203,7 @@ async def update_match_teams(
             {"players_red": players_red, "players_blue": players_blue},
         )
         return Match(**data)
-    except Exception:
+    except (ValueError, ConnectionError, KeyError):
         return None
 
 
@@ -200,7 +213,7 @@ async def update_match_defense(match_id: str, defense_start: str) -> Optional[Ma
             f"/matches/{match_id}", {"defense_start": defense_start}
         )
         return Match(**data)
-    except Exception:
+    except (ValueError, ConnectionError, KeyError):
         return None
 
 
@@ -213,7 +226,7 @@ async def update_match_maps(
             {"banned_maps": banned_maps, "selected_map": selected_map},
         )
         return Match(**data)
-    except Exception:
+    except (ValueError, ConnectionError, KeyError):
         return None
 
 
@@ -229,7 +242,7 @@ async def update_match_result(
         }
         data = await api_client.patch(f"/matches/{match_id}", update_data)
         return Match(**data)
-    except Exception:
+    except (ValueError, ConnectionError, KeyError):
         return None
 
 
@@ -237,26 +250,35 @@ async def get_match(match_id: str) -> Optional[Match]:
     try:
         data = await api_client.get(f"/matches/{match_id}")
         return Match(**data)
-    except Exception:
+    except (ValueError, ConnectionError, KeyError):
         return None
 
 
 async def get_active_matches() -> List[Match]:
+    global _ACTIVE_MATCHES_CACHE, _ACTIVE_MATCHES_CACHE_TIME
+    now = time.monotonic()
+    if now - _ACTIVE_MATCHES_CACHE_TIME < _ACTIVE_MATCHES_CACHE_TTL_SECONDS:
+        return _ACTIVE_MATCHES_CACHE
+
     try:
         data = await api_client.get("/matches/active")
-        return [Match(**match) for match in data]
+        _ACTIVE_MATCHES_CACHE = [Match(**match) for match in data]
+        _ACTIVE_MATCHES_CACHE_TIME = now
+        return _ACTIVE_MATCHES_CACHE
     except Exception:
-        return []
+        return _ACTIVE_MATCHES_CACHE
 
 
 async def is_player_in_match(discord_id: str) -> bool:
     try:
         active_matches = await get_active_matches()
         for match in active_matches:
-            if discord_id in match.players_red or discord_id in match.players_blue:
+            if match.players_red and discord_id in match.players_red:
+                return True
+            if match.players_blue and discord_id in match.players_blue:
                 return True
         return False
-    except Exception:
+    except (ValueError, ConnectionError, KeyError, TypeError):
         return False
 
 
@@ -270,7 +292,7 @@ async def get_leaderboard(rank_group: str) -> Leaderboard:
             if not await is_player_banned(player.discord_id)
         ]
         return leaderboard
-    except Exception:
+    except (ValueError, ConnectionError, KeyError, TypeError):
         return Leaderboard(rank_group=rank_group)
 
 
@@ -314,7 +336,7 @@ async def get_match_history(limit: Optional[int] = 10) -> List[Match]:
         params = {"limit": limit} if limit is not None else {}
         data = await api_client.get("/history/matches", params)
         return [Match(**match) for match in data]
-    except Exception:
+    except (ValueError, ConnectionError, KeyError, TypeError):
         return []
 
 
@@ -325,7 +347,7 @@ async def get_player_match_history(
         params = {"limit": limit} if limit is not None else {}
         data = await api_client.get(f"/history/matches/player/{discord_id}", params)
         return [Match(**match) for match in data]
-    except Exception:
+    except (ValueError, ConnectionError, KeyError, TypeError):
         return []
 
 
@@ -333,7 +355,7 @@ async def get_banned_players() -> List[dict]:
     try:
         data = await api_client.get("/admin/bans")
         return data
-    except Exception:
+    except (ValueError, ConnectionError, KeyError, TypeError):
         return []
 
 
@@ -341,13 +363,62 @@ async def get_timeout_players() -> List[dict]:
     try:
         data = await api_client.get("/admin/timeouts")
         return data
-    except Exception:
+    except (ValueError, ConnectionError, KeyError, TypeError):
         return []
 
 
 _BAN_CACHE: Dict[str, Tuple[bool, float]] = {}
 _TIMEOUT_CACHE: Dict[str, Tuple[bool, float]] = {}
 _SANCTION_TTL_SECONDS = 60.0
+
+_ACTIVE_MATCHES_CACHE: List[Match] = []
+_ACTIVE_MATCHES_CACHE_TIME: float = 0.0
+_ACTIVE_MATCHES_CACHE_TTL_SECONDS = 30.0
+
+
+async def batch_check_players(
+    discord_ids: List[str],
+) -> Tuple[Dict[str, bool], Dict[str, bool]]:
+    now = time.monotonic()
+    bans = {}
+    timeouts = {}
+
+    uncached_ids = []
+    for discord_id in discord_ids:
+        ban_cached = _BAN_CACHE.get(discord_id)
+        timeout_cached = _TIMEOUT_CACHE.get(discord_id)
+
+        if ban_cached and now < ban_cached[1]:
+            bans[discord_id] = ban_cached[0]
+        else:
+            uncached_ids.append(discord_id)
+
+        if timeout_cached and now < timeout_cached[1]:
+            timeouts[discord_id] = timeout_cached[0]
+
+    if uncached_ids:
+        try:
+            data = await api_client.post(
+                "/admin/check-batch", {"discord_ids": uncached_ids}
+            )
+            for discord_id in uncached_ids:
+                if discord_id in data.get("bans", {}):
+                    bans[discord_id] = bool(data["bans"][discord_id])
+                    _BAN_CACHE[discord_id] = (
+                        bans[discord_id],
+                        now + _SANCTION_TTL_SECONDS,
+                    )
+
+                if discord_id in data.get("timeouts", {}):
+                    timeouts[discord_id] = bool(data["timeouts"][discord_id])
+                    _TIMEOUT_CACHE[discord_id] = (
+                        timeouts[discord_id],
+                        now + _SANCTION_TTL_SECONDS,
+                    )
+        except (ValueError, ConnectionError, KeyError):
+            pass
+
+    return bans, timeouts
 
 
 async def is_player_banned(discord_id: str) -> bool:
@@ -359,7 +430,7 @@ async def is_player_banned(discord_id: str) -> bool:
         data = await api_client.get(f"/admin/check-ban/{discord_id}")
         _BAN_CACHE[discord_id] = (bool(data), now + _SANCTION_TTL_SECONDS)
         return bool(data)
-    except Exception:
+    except (ValueError, ConnectionError):
         return cached[0] if cached else False
 
 
@@ -372,7 +443,7 @@ async def is_player_timeout(discord_id: str) -> bool:
         data = await api_client.get(f"/admin/check-timeout/{discord_id}")
         _TIMEOUT_CACHE[discord_id] = (bool(data), now + _SANCTION_TTL_SECONDS)
         return bool(data)
-    except Exception:
+    except (ValueError, ConnectionError):
         return cached[0] if cached else False
 
 
@@ -404,14 +475,14 @@ async def add_admin_log(
 async def remove_admin_log(action: str, target_discord_id: str) -> None:
     try:
         await api_client.delete(f"/admin/logs/{action}/{target_discord_id}")
-    except Exception:
+    except (ValueError, ConnectionError):
         pass
 
 
 async def save_user_preferences(prefs: UserPreferences) -> None:
     try:
         await api_client.patch(f"/preferences/{prefs.discord_id}", prefs.dict())
-    except Exception:
+    except (ValueError, ConnectionError):
         pass
 
 
@@ -419,5 +490,5 @@ async def get_user_preferences(discord_id: str) -> Optional[UserPreferences]:
     try:
         data = await api_client.get(f"/preferences/{discord_id}")
         return UserPreferences(**data)
-    except Exception:
+    except (ValueError, ConnectionError, KeyError):
         return None

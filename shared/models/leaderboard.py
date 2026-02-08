@@ -8,6 +8,7 @@ class LeaderboardEntry(BaseModel):
     rank: str
     points: int = Field(ge=0)
     matches_played: int = Field(ge=0)
+    wins: int = Field(ge=0, default=0)
     winrate: float = Field(ge=0.0, le=100.0)
     streak: int = Field(default=0)
 
