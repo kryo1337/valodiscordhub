@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, Body, Query, Request
 from db import get_db
-from auth import require_bot_token
+from auth import require_bot_token, get_request_origin
 from models.leaderboard import Leaderboard, LeaderboardEntry
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import List, Literal, Optional
+from events.broadcast import broadcast_leaderboard_update
 
 router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
 
@@ -145,6 +146,7 @@ async def get_player_rank(
 )
 async def update_leaderboard(
     rank_group: str,
+    request: Request,
     leaderboard: Leaderboard = Body(...),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
@@ -153,4 +155,20 @@ async def update_leaderboard(
         {"rank_group": rank_group}, {"$set": leaderboard.dict()}, upsert=True
     )
     doc = await db.leaderboards.find_one({"rank_group": rank_group})
-    return Leaderboard(**doc)
+    updated_leaderboard = Leaderboard(**doc)
+
+    origin = get_request_origin(request)
+
+    # Sort by points and get top 50 for the broadcast
+    sorted_players = sorted(
+        updated_leaderboard.players, key=lambda x: x.points, reverse=True
+    )[:50]
+    top_players = [p.dict() for p in sorted_players]
+
+    await broadcast_leaderboard_update(
+        rank_group=rank_group,
+        top_players=top_players,
+        origin=origin,
+    )
+
+    return updated_leaderboard

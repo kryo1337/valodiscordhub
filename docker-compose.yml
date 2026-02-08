@@ -10,6 +10,7 @@ services:
     environment:
       - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    command: ["mongod", "--quiet", "--logpath", "/data/db/mongod.log", "--logappend"]
 
   redis:
     image: redis:7-alpine
@@ -19,7 +20,7 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --loglevel warning
 
   db-init:
     build: ./db

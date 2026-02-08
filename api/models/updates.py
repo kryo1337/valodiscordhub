@@ -134,11 +134,7 @@ class MatchUpdate(BaseModel):
         data = {}
         for k, v in self.model_dump().items():
             if v is not None:
-                # Handle datetime serialization
-                if isinstance(v, datetime):
-                    data[k] = v.isoformat()
-                else:
-                    data[k] = v
+                data[k] = v
         return data
 
 

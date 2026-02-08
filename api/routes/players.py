@@ -1,10 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
 from db import get_db
-from auth import require_bot_token, require_auth, optional_current_user
+from auth import (
+    require_bot_token,
+    require_auth,
+    optional_current_user,
+    get_request_origin,
+)
 from models.player import Player
 from models.updates import PlayerUpdate
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import List, Optional
+from events.broadcast import broadcast_player_updated
 
 router = APIRouter(prefix="/players", tags=["players"])
 
@@ -22,12 +28,26 @@ async def list_players(
 
 @router.post("/", response_model=Player, dependencies=[Depends(require_bot_token)])
 async def create_player(
-    player: Player = Body(...), db: AsyncIOMotorDatabase = Depends(get_db)
+    request: Request,
+    player: Player = Body(...),
+    db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     """Create a new player. Bot only."""
     if await db.players.find_one({"discord_id": player.discord_id}):
         raise HTTPException(status_code=409, detail="Player already exists")
     await db.players.insert_one(player.dict())
+
+    origin = get_request_origin(request)
+
+    if player.rank:
+        await broadcast_player_updated(
+            discord_id=player.discord_id,
+            field="rank",
+            value=player.rank,
+            origin=origin,
+            origin_id=player.discord_id,
+        )
+
     return player
 
 
@@ -60,6 +80,7 @@ async def get_player(
 )
 async def update_player(
     discord_id: str,
+    request: Request,
     update: PlayerUpdate = Body(...),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
@@ -72,7 +93,22 @@ async def update_player(
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Player not found")
     doc = await db.players.find_one({"discord_id": discord_id})
-    return Player(**doc)
+    player = Player(**doc)
+
+    origin = get_request_origin(request)
+
+    broadcast_fields = {"rank", "points", "riot_id"}
+    for field, value in update_dict.items():
+        if field in broadcast_fields:
+            await broadcast_player_updated(
+                discord_id=discord_id,
+                field=field,
+                value=str(value),
+                origin=origin,
+                origin_id=discord_id,
+            )
+
+    return player
 
 
 @router.delete("/test-bots", dependencies=[Depends(require_bot_token)])

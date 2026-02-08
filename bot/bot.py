@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from typing import cast
 from utils.rate_limit import rate_limiter
 from utils.permissions import check_command_permissions
+from websocket_client import ws_client
+from websocket_handlers import setup_handlers
 
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -116,6 +118,14 @@ async def on_ready():
             logger.info(f"Synced {len(synced)} global slash command(s).")
     except Exception as e:
         logger.error(f"Failed to sync slash commands: {e}")
+
+    # Setup WebSocket handlers and start client
+    try:
+        setup_handlers(bot)
+        asyncio.create_task(ws_client.start())
+        logger.info("WebSocket client started in background")
+    except Exception as e:
+        logger.error(f"Failed to start WebSocket client: {e}")
 
 
 async def main():

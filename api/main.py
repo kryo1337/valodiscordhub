@@ -187,6 +187,7 @@ from routes.preferences import router as preferences_router
 from routes.stats import router as stats_router
 from routes.history import router as history_router
 from auth import router as auth_router
+from websocket import router as websocket_router
 
 app.include_router(players_router)
 app.include_router(leaderboard_router)
@@ -197,3 +198,4 @@ app.include_router(preferences_router)
 app.include_router(stats_router)
 app.include_router(history_router)
 app.include_router(auth_router)
+app.include_router(websocket_router)

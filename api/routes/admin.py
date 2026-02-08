@@ -160,11 +160,13 @@ async def is_player_timeout(
     """
     Check if a player is currently in timeout.
 
-    Automatically removes expired timeouts from the database.
+    Checks only the latest timeout log.
     """
+    # Find latest timeout
     timeout = await db.admin_logs.find_one(
-        {"action": "timeout", "target_discord_id": discord_id}
+        {"action": "timeout", "target_discord_id": discord_id}, sort=[("timestamp", -1)]
     )
+
     if not timeout:
         return False
 
@@ -176,14 +178,8 @@ async def is_player_timeout(
 
     time_diff = (current_time - timeout_time).total_seconds() / 60.0
 
-    if time_diff >= duration:
-        # Timeout has expired, remove it
-        await db.admin_logs.delete_one(
-            {"action": "timeout", "target_discord_id": discord_id}
-        )
-        return False
-
-    return True
+    # Return True if active (time_diff < duration)
+    return time_diff < duration
 
 
 @router.get("/check-timeout/{discord_id}/remaining")
@@ -191,9 +187,11 @@ async def get_timeout_remaining(
     discord_id: str, db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     """Get remaining timeout duration for a player in minutes."""
+    # Find latest timeout
     timeout = await db.admin_logs.find_one(
-        {"action": "timeout", "target_discord_id": discord_id}
+        {"action": "timeout", "target_discord_id": discord_id}, sort=[("timestamp", -1)]
     )
+
     if not timeout:
         return {"is_timeout": False, "remaining_minutes": 0}
 
@@ -207,9 +205,6 @@ async def get_timeout_remaining(
     remaining = duration - time_diff
 
     if remaining <= 0:
-        await db.admin_logs.delete_one(
-            {"action": "timeout", "target_discord_id": discord_id}
-        )
         return {"is_timeout": False, "remaining_minutes": 0}
 
     return {

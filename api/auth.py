@@ -7,8 +7,11 @@ from fastapi import Depends, HTTPException, status, Request, APIRouter
 from fastapi.responses import RedirectResponse
 from jose import JWTError, jwt
 import httpx
-from typing import Optional
+from typing import Optional, Literal
 from config import settings
+
+# Origin type for event deduplication
+EventOrigin = Literal["bot", "frontend"]
 
 # OAuth URLs
 OAUTH_AUTHORIZE_URL = "https://discord.com/api/oauth2/authorize"
@@ -16,6 +19,18 @@ OAUTH_TOKEN_URL = "https://discord.com/api/oauth2/token"
 OAUTH_USER_URL = "https://discord.com/api/users/@me"
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def get_request_origin(request: Request) -> EventOrigin:
+    """
+    Determine the origin of a request based on the Authorization header.
+    Returns "bot" if Bot token is used, "frontend" otherwise.
+    This is used for WebSocket event deduplication.
+    """
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bot "):
+        return "bot"
+    return "frontend"
 
 
 async def require_bot_token(request: Request) -> None:

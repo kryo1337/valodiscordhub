@@ -389,6 +389,28 @@ class LeaderboardCog(commands.Cog):
                     embed=embed, view=view, ephemeral=True
                 )
 
+    async def on_leaderboard_update_from_api(self, guild: discord.Guild, event: dict):
+        """
+        Handle leaderboard update from frontend/API.
+
+        Refreshes the leaderboard display channel when leaderboard
+        changes occur via the web frontend.
+        """
+        rank_group = event.get("rank_group")
+        top_players = event.get("top_players", [])
+
+        # Find the leaderboard channel
+        category = discord.utils.get(guild.categories, name="Hub")
+        if not category:
+            return
+
+        channel = discord.utils.get(category.channels, name="leaderboard")
+        if not channel or channel.id not in self.leaderboard_channels:
+            return
+
+        # Refresh the leaderboard display
+        await self.update_leaderboard_display(channel)
+
 
 async def setup(bot):
     await bot.add_cog(LeaderboardCog(bot))
