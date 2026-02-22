@@ -41,8 +41,11 @@ services:
       - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/valodiscordhub?authSource=admin
       - MONGODB_DB=valodiscordhub
       - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/api:/app
     ports:
       - "8000:8000"
+    volumes:
+      - ./shared:/shared
     env_file:
       - .env
     restart: unless-stopped
@@ -56,12 +59,26 @@ services:
     environment:
       - API_BASE_URL=http://api:8000
       - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/valodiscordhub?authSource=admin
-      - PYTHONPATH=/bot:/bot/..
+      - PYTHONPATH=/bot:/app
+    volumes:
+      - ./shared:/shared
     env_file:
       - .env
     dns:
       - 8.8.8.8
       - 8.8.4.4
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
+        VITE_WS_URL: ws://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "5173:5173"
     restart: unless-stopped
 
 volumes:
